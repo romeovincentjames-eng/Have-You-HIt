@@ -107,6 +107,8 @@
   html,
   body {
     font-family: var(--font-sans);
+    max-width: 100%;
+    overflow-x: hidden;
   }
   body {
     background-color: var(--color-background);

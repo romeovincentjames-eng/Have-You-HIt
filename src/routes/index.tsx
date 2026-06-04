@@ -12,6 +12,7 @@ import { supabase } from "@/integrations/supabase/client";
 import { useAuth } from "@/hooks/use-auth";
 import { AgeVerificationGate } from "@/components/AgeVerificationGate";
 import { AuthGate } from "@/components/AuthGate";
+import { GenderGate } from "@/components/GenderGate";
 import { GuidelinesGate } from "@/components/GuidelinesGate";
 import { PaymentGate, SubscribeButton } from "@/components/PaymentGate";
 import { UploadDialog } from "@/components/UploadDialog";
@@ -54,8 +55,13 @@ type Post = {
 };
 
 type ActiveView = "feed" | "dating" | "matches";
+type Gender = "man" | "woman";
 
 const NEARBY_KM = 80;
+
+function isSupportedGender(value: unknown): value is Gender {
+  return value === "man" || value === "woman";
+}
 
 function getSavedAgeVerifiedAt(user: { user_metadata?: Record<string, unknown> } | null) {
   const metadata = user?.user_metadata ?? {};
@@ -203,7 +209,6 @@ function Index() {
       const { error: profileError } = await supabase.from("profiles").upsert({
         id: user.id,
         display_name: displayName,
-        gender: "confirmed_18_plus",
         age_verified_at: confirmedAt,
         age_verification_method: "self_confirmation",
       });
@@ -221,7 +226,6 @@ function Index() {
 
       if (authError) throw authError;
 
-      setGender("confirmed_18_plus");
       setAgeVerifiedAt(confirmedAt);
       await supabase.auth.refreshSession();
       toast.success("18+ confirmed. Welcome in.");
@@ -427,6 +431,8 @@ function Index() {
         onSignOut={() => supabase.auth.signOut()}
       />
     );
+  if (!isSupportedGender(gender))
+    return <GenderGate userId={user.id} onConfirmed={(nextGender) => setGender(nextGender)} />;
   if (guidelinesAgreedAt === undefined) return <div className="min-h-screen" />;
   if (!guidelinesAgreedAt)
     return <GuidelinesGate userId={user.id} onConfirmed={setGuidelinesAgreedAt} />;
@@ -546,7 +552,7 @@ function Index() {
                     </div>
 
                     <div className="grid grid-cols-[1fr_1fr_auto] gap-2">
-                      <UploadDialog userId={user.id} onUploaded={load} />
+                      <UploadDialog userId={user.id} currentGender={gender} onUploaded={load} />
 
                       <Button
                         type="button"
@@ -653,6 +659,7 @@ function Index() {
           {activeView === "dating" && (
             <DatingSection
               currentUserId={user.id}
+              currentGender={gender}
               active={active}
               checkingOut={checkingOut}
               priceLabel={priceLabel}
@@ -662,7 +669,11 @@ function Index() {
           )}
 
           {activeView === "matches" && (
-            <MatchesSection currentUserId={user.id} refreshKey={matchesRefreshKey} />
+            <MatchesSection
+              currentUserId={user.id}
+              currentGender={gender}
+              refreshKey={matchesRefreshKey}
+            />
           )}
         </div>
       )}

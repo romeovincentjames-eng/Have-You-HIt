@@ -25,7 +25,10 @@ type Message = {
 type ProfileName = {
   id: string;
   display_name: string;
+  gender: string | null;
 };
+
+type Gender = "man" | "woman";
 
 function getErrorMessage(error: unknown, fallback: string) {
   return error instanceof Error ? error.message : fallback;
@@ -33,9 +36,11 @@ function getErrorMessage(error: unknown, fallback: string) {
 
 export function MatchesSection({
   currentUserId,
+  currentGender,
   refreshKey,
 }: {
   currentUserId: string;
+  currentGender: Gender;
   refreshKey: number;
 }) {
   const [matches, setMatches] = useState<Match[]>([]);
@@ -80,31 +85,40 @@ export function MatchesSection({
       );
 
       const nextNames: Record<string, string> = {};
+      const nextGenders: Record<string, string | null> = {};
       if (ids.length) {
         const { data: profiles, error: profilesError } = await supabase
           .from("profiles")
-          .select("id,display_name")
+          .select("id,display_name,gender")
           .in("id", ids);
 
         if (profilesError) throw profilesError;
 
         (profiles as ProfileName[] | null)?.forEach((profile) => {
           nextNames[profile.id] = profile.display_name;
+          nextGenders[profile.id] = profile.gender;
         });
       }
 
-      setMatches(nextMatches);
+      const opposite = currentGender === "man" ? "woman" : "man";
+      const visibleMatches = nextMatches.filter((match) => {
+          const otherId =
+            match.user_a_id === currentUserId ? match.user_b_id : match.user_a_id;
+          return nextGenders[otherId] === opposite;
+        });
+
+      setMatches(visibleMatches);
       setNames(nextNames);
       setSelectedMatchId((current) => {
-        if (current && nextMatches.some((match) => match.id === current)) return current;
-        return nextMatches[0]?.id ?? null;
+        if (current && visibleMatches.some((match) => match.id === current)) return current;
+        return visibleMatches[0]?.id ?? null;
       });
     } catch (err) {
       toast.error(getErrorMessage(err, "Could not load matches"));
     } finally {
       setLoadingMatches(false);
     }
-  }, [currentUserId]);
+  }, [currentGender, currentUserId]);
 
   const loadMessages = useCallback(async () => {
     if (!selectedMatchId) {

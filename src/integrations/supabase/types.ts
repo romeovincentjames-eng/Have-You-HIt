@@ -268,6 +268,7 @@ export type Database = {
           display_name: string;
           gender: string | null;
           id: string;
+          posting_consent_agreed_at: string | null;
           stripe_identity_session_id: string | null;
           stripe_identity_status: string | null;
           stripe_identity_verified_at: string | null;
@@ -282,6 +283,7 @@ export type Database = {
           display_name: string;
           gender?: string | null;
           id: string;
+          posting_consent_agreed_at?: string | null;
           stripe_identity_session_id?: string | null;
           stripe_identity_status?: string | null;
           stripe_identity_verified_at?: string | null;
@@ -296,6 +298,7 @@ export type Database = {
           display_name?: string;
           gender?: string | null;
           id?: string;
+          posting_consent_agreed_at?: string | null;
           stripe_identity_session_id?: string | null;
           stripe_identity_status?: string | null;
           stripe_identity_verified_at?: string | null;

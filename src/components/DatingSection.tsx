@@ -28,6 +28,7 @@ type DatingProfile = {
 type ProfileName = {
   id: string;
   display_name: string;
+  gender: string | null;
 };
 
 type DatingVote = {
@@ -40,7 +41,9 @@ type InboundHit = {
 };
 
 type Loc = { lat: number; lng: number; label: string | null };
+type Gender = "man" | "woman";
 
+const DATING_AREA_KM = 80;
 const IMAGE_FILE_NAME = /\.(avif|gif|heic|heif|jpe?g|png|webp)$/i;
 
 function safeRandomId() {
@@ -53,6 +56,22 @@ function safeRandomId() {
 
 function isImageFile(file: File) {
   return file.type.startsWith("image/") || IMAGE_FILE_NAME.test(file.name);
+}
+
+function oppositeGender(gender: Gender) {
+  return gender === "man" ? "woman" : "man";
+}
+
+function distanceKm(a: { lat: number; lng: number }, b: { lat: number; lng: number }) {
+  const R = 6371;
+  const dLat = ((b.lat - a.lat) * Math.PI) / 180;
+  const dLng = ((b.lng - a.lng) * Math.PI) / 180;
+
+  const s =
+    Math.sin(dLat / 2) ** 2 +
+    Math.cos((a.lat * Math.PI) / 180) * Math.cos((b.lat * Math.PI) / 180) * Math.sin(dLng / 2) ** 2;
+
+  return 2 * R * Math.asin(Math.sqrt(s));
 }
 
 function getErrorMessage(error: unknown, fallback: string) {
@@ -272,10 +291,18 @@ function SelfProfileDialog({
             variant="outline"
             onClick={tagLocation}
             disabled={locLoading}
-            className="h-10 w-full rounded-full gap-2"
+            className="h-10 w-full min-w-0 overflow-hidden rounded-full gap-2 px-4"
           >
-            {locLoading ? <Loader2 className="size-4 animate-spin" /> : <MapPin className="size-4" />}
-            {loc ? (loc.label ?? `${loc.lat.toFixed(3)}, ${loc.lng.toFixed(3)}`) : "Tag profile location"}
+            {locLoading ? (
+              <Loader2 className="size-4 shrink-0 animate-spin" />
+            ) : (
+              <MapPin className="size-4 shrink-0" />
+            )}
+            <span className="min-w-0 truncate">
+              {loc
+                ? (loc.label ?? `${loc.lat.toFixed(3)}, ${loc.lng.toFixed(3)}`)
+                : "Tag profile location"}
+            </span>
           </Button>
 
           <Button onClick={saveProfile} disabled={saving} className="h-11 w-full rounded-full font-semibold">
@@ -289,6 +316,7 @@ function SelfProfileDialog({
 
 export function DatingSection({
   currentUserId,
+  currentGender,
   active,
   checkingOut,
   priceLabel,
@@ -296,6 +324,7 @@ export function DatingSection({
   onMatchesChanged,
 }: {
   currentUserId: string;
+  currentGender: Gender;
   active: boolean;
   checkingOut: boolean;
   priceLabel: string;
@@ -325,7 +354,7 @@ export function DatingSection({
           .select("*")
           .neq("user_id", currentUserId)
           .order("updated_at", { ascending: false })
-          .limit(80),
+          .limit(300),
         supabase.from("dating_votes").select("target_user_id,vote").eq("voter_id", currentUserId),
         supabase
           .from("dating_votes")
@@ -348,16 +377,18 @@ export function DatingSection({
       );
 
       const nextNames: Record<string, string> = {};
+      const nextGenders: Record<string, string | null> = {};
       if (nameIds.length) {
         const { data: profileNames, error: namesError } = await supabase
           .from("profiles")
-          .select("id,display_name")
+          .select("id,display_name,gender")
           .in("id", nameIds);
 
         if (namesError) throw namesError;
 
         (profileNames as ProfileName[] | null)?.forEach((profile) => {
           nextNames[profile.id] = profile.display_name;
+          nextGenders[profile.id] = profile.gender;
         });
       }
 
@@ -366,17 +397,32 @@ export function DatingSection({
         nextVotes[vote.target_user_id] = vote.vote;
       });
 
-      setMyProfile((ownProfile as DatingProfile | null) ?? null);
-      setProfiles(visibleProfiles);
+      const myDatingProfile = (ownProfile as DatingProfile | null) ?? null;
+      setMyProfile(myDatingProfile);
+      const opposite = oppositeGender(currentGender);
+      const myLocation =
+        myDatingProfile?.latitude != null && myDatingProfile.longitude != null
+          ? { lat: myDatingProfile.latitude, lng: myDatingProfile.longitude }
+          : null;
+
+      setProfiles(
+        visibleProfiles.filter((profile) => {
+          if (nextGenders[profile.user_id] !== opposite) return false;
+          if (!myLocation) return false;
+          if (profile.latitude == null || profile.longitude == null) return false;
+
+          return distanceKm(myLocation, { lat: profile.latitude, lng: profile.longitude }) <= DATING_AREA_KM;
+        }),
+      );
       setNames(nextNames);
       setMyVotes(nextVotes);
-      setInboundHits(incoming);
+      setInboundHits(incoming.filter((id) => nextGenders[id] === opposite));
     } catch (err) {
       toast.error(getErrorMessage(err, "Could not load dating profiles"));
     } finally {
       setLoading(false);
     }
-  }, [currentUserId]);
+  }, [currentGender, currentUserId]);
 
   useEffect(() => {
     load();
@@ -386,6 +432,7 @@ export function DatingSection({
     () => inboundHits.map((id) => ({ id, name: names[id] ?? "someone" })),
     [inboundHits, names],
   );
+  const hasProfileLocation = myProfile?.latitude != null && myProfile.longitude != null;
 
   async function vote(targetUserId: string, voteValue: "hit" | "not_hit") {
     if (!myProfile) {
@@ -495,6 +542,12 @@ export function DatingSection({
           </Button>
         </div>
 
+        {hasProfileLocation && (
+          <p className="text-xs font-black uppercase text-primary">
+            Showing people within {DATING_AREA_KM}km of your geotagged area
+          </p>
+        )}
+
         {loading && profiles.length === 0 && (
           <div className="rounded-2xl border border-border bg-card py-16 text-center text-sm text-muted-foreground">
             Loading dating profiles...
@@ -503,8 +556,14 @@ export function DatingSection({
 
         {!loading && profiles.length === 0 && (
           <div className="rounded-2xl border border-border bg-card px-5 py-16 text-center">
-            <p className="font-display text-2xl font-bold">No self-posts yet</p>
-            <p className="mt-2 text-sm text-muted-foreground">When people post themselves, they will show up here.</p>
+            <p className="font-display text-2xl font-bold">
+              {hasProfileLocation ? "No nearby self-posts yet" : "Tag your dating location"}
+            </p>
+            <p className="mt-2 text-sm text-muted-foreground">
+              {hasProfileLocation
+                ? "When people in your geotagged area post themselves, they will show up here."
+                : "Add a geotag to your dating post to see people in your area."}
+            </p>
           </div>
         )}
 

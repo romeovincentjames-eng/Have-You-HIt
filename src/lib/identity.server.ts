@@ -150,7 +150,6 @@ async function updateIdentityStatus(options: {
     .update({
       ...(options.ageVerifiedAt
         ? {
-            gender: "confirmed_18_plus",
             age_verified_at: options.ageVerifiedAt,
             age_verification_method: "stripe_identity",
             stripe_identity_verified_at: options.ageVerifiedAt,

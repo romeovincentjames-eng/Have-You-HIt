@@ -19,6 +19,8 @@ export function AuthGate() {
   const [email, setEmail] = useState("");
   const [password, setPassword] = useState("");
   const [displayName, setDisplayName] = useState("");
+  const [gender, setGender] = useState<"man" | "woman" | "">("");
+  const [postingConsentAgreed, setPostingConsentAgreed] = useState(false);
   const [guidelinesOpened, setGuidelinesOpened] = useState(false);
   const [guidelinesExpanded, setGuidelinesExpanded] = useState(false);
   const [guidelinesAgreed, setGuidelinesAgreed] = useState(false);
@@ -71,9 +73,20 @@ export function AuthGate() {
       return;
     }
 
+    if (gender !== "man" && gender !== "woman") {
+      toast.error("Confirm your gender before joining.");
+      return;
+    }
+
+    if (!postingConsentAgreed) {
+      toast.error("Please accept being posted and tagged on this app before joining.");
+      return;
+    }
+
     setLoading(true);
     try {
       const agreedAt = new Date().toISOString();
+      const postingConsentAgreedAt = agreedAt;
       const normalizedEmail = email.trim().toLowerCase();
       const normalizedDisplayName = displayName.trim() || normalizedEmail.split("@")[0];
 
@@ -82,6 +95,8 @@ export function AuthGate() {
           email: normalizedEmail,
           password,
           displayName: normalizedDisplayName,
+          gender,
+          postingConsentAgreedAt,
           communityGuidelinesAgreedAt: agreedAt,
           communityGuidelinesVersion: COMMUNITY_GUIDELINES_VERSION,
         },
@@ -155,6 +170,35 @@ export function AuthGate() {
                 />
               </div>
             )}
+
+            {mode === "signup" && (
+              <div className="space-y-2">
+                <Label>Confirm your gender</Label>
+                <div className="grid grid-cols-2 gap-2 rounded-2xl bg-muted p-1">
+                  {[
+                    { value: "man", label: "Man" },
+                    { value: "woman", label: "Woman" },
+                  ].map((option) => (
+                    <button
+                      key={option.value}
+                      type="button"
+                      onClick={() => setGender(option.value as "man" | "woman")}
+                      className={`h-10 rounded-xl text-sm font-black transition ${
+                        gender === option.value
+                          ? "bg-primary text-primary-foreground shadow"
+                          : "text-muted-foreground"
+                      }`}
+                    >
+                      {option.label}
+                    </button>
+                  ))}
+                </div>
+                <p className="text-xs font-semibold text-muted-foreground">
+                  This app only matches men with women and women with men.
+                </p>
+              </div>
+            )}
+
             <div>
               <Label htmlFor="email">Email</Label>
               <Input
@@ -213,6 +257,26 @@ export function AuthGate() {
             )}
 
             {mode === "signup" && (
+              <label className="flex items-start gap-3 rounded-2xl border-2 border-primary bg-primary/10 p-4 cursor-pointer">
+                <Checkbox
+                  checked={postingConsentAgreed}
+                  onCheckedChange={(value) => setPostingConsentAgreed(value === true)}
+                  className="mt-1 size-5"
+                  aria-label="Accept being posted and tagged on this app"
+                />
+
+                <span>
+                  <span className="text-xl font-black uppercase leading-tight text-primary">
+                    I accept being posted and tagged on this app
+                  </span>
+                  <span className="mt-2 block text-sm font-semibold text-foreground">
+                    Other registered users may tag me in a Have You Hit post under the app rules.
+                  </span>
+                </span>
+              </label>
+            )}
+
+            {mode === "signup" && (
               <label
                 className={`flex items-start gap-3 rounded-2xl border-2 p-4 ${
                   guidelinesOpened
@@ -243,7 +307,14 @@ export function AuthGate() {
 
             <Button
               type="submit"
-              disabled={loading || (mode === "signup" && (!guidelinesOpened || !guidelinesAgreed))}
+              disabled={
+                loading ||
+                (mode === "signup" &&
+                  (!guidelinesOpened ||
+                    !guidelinesAgreed ||
+                    !postingConsentAgreed ||
+                    (gender !== "man" && gender !== "woman")))
+              }
               className="w-full rounded-full h-11 text-base font-semibold"
             >
               {loading ? "..." : mode === "signup" ? "Start hitting" : "Let me in"}

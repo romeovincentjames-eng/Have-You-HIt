@@ -2,6 +2,7 @@ import { useEffect, useRef, useState } from "react";
 import { supabase } from "@/integrations/supabase/client";
 import { Button } from "@/components/ui/button";
 import { Checkbox } from "@/components/ui/checkbox";
+import { Input } from "@/components/ui/input";
 import { Textarea } from "@/components/ui/textarea";
 import {
   Dialog,
@@ -12,10 +13,21 @@ import {
 } from "@/components/ui/dialog";
 import { CommunityGuidelinesList } from "@/components/CommunityGuidelines";
 import { toast } from "sonner";
-import { ChevronDown, ImagePlus, Upload, MapPin, Loader2, ShieldCheck } from "lucide-react";
+import {
+  CheckCircle2,
+  ChevronDown,
+  ImagePlus,
+  Loader2,
+  MapPin,
+  Search,
+  ShieldCheck,
+  Upload,
+  X,
+} from "lucide-react";
 
 type Loc = { lat: number; lng: number; label: string | null };
-type UserOption = { id: string; display_name: string };
+type Gender = "man" | "woman";
+type UserOption = { id: string; display_name: string; gender: Gender | null };
 
 const IMAGE_FILE_NAME = /\.(avif|gif|heic|heif|jpe?g|png|webp)$/i;
 
@@ -35,11 +47,17 @@ function isImageFile(file: File) {
   return file.type.startsWith("image/") || IMAGE_FILE_NAME.test(file.name);
 }
 
+function oppositeGender(gender: Gender) {
+  return gender === "man" ? "woman" : "man";
+}
+
 export function UploadDialog({
   userId,
+  currentGender,
   onUploaded,
 }: {
   userId: string;
+  currentGender: Gender;
   onUploaded: () => void;
 }) {
   const [open, setOpen] = useState(false);
@@ -47,6 +65,7 @@ export function UploadDialog({
   const [preview, setPreview] = useState<string | null>(null);
   const [previewError, setPreviewError] = useState("");
   const [targetUserId, setTargetUserId] = useState("");
+  const [userSearch, setUserSearch] = useState("");
   const [userOptions, setUserOptions] = useState<UserOption[]>([]);
   const [userOptionsLoading, setUserOptionsLoading] = useState(false);
   const [caption, setCaption] = useState("");
@@ -59,6 +78,10 @@ export function UploadDialog({
   const [loading, setLoading] = useState(false);
   const fileInputRef = useRef<HTMLInputElement | null>(null);
   const previewReadId = useRef(0);
+  const selectedUser = userOptions.find((option) => option.id === targetUserId);
+  const filteredUserOptions = userOptions.filter((option) =>
+    option.display_name.toLowerCase().includes(userSearch.trim().toLowerCase()),
+  );
 
   useEffect(() => {
     if (!open) return;
@@ -70,8 +93,9 @@ export function UploadDialog({
 
       const { data, error } = await supabase
         .from("profiles")
-        .select("id,display_name")
+        .select("id,display_name,gender")
         .neq("id", userId)
+        .eq("gender", oppositeGender(currentGender))
         .order("display_name", { ascending: true })
         .limit(100);
 
@@ -92,7 +116,7 @@ export function UploadDialog({
     return () => {
       cancelled = true;
     };
-  }, [open, userId]);
+  }, [currentGender, open, userId]);
 
   function pick(f: File | null) {
     previewReadId.current += 1;
@@ -279,6 +303,7 @@ export function UploadDialog({
       setPreviewError("");
       setCaption("");
       setTargetUserId("");
+      setUserSearch("");
       setLoc(null);
       setPrivacyAgreed(false);
       setGuidelinesOpened(false);
@@ -365,25 +390,70 @@ export function UploadDialog({
           </div>
 
           <div className="space-y-2">
-            <label className="text-xs font-black uppercase text-primary">Tag another user *</label>
-            <select
-              value={targetUserId}
-              onChange={(event) => setTargetUserId(event.target.value)}
-              disabled={userOptionsLoading}
-              className="h-11 w-full rounded-2xl border border-input bg-background px-3 text-sm font-semibold outline-none focus-visible:ring-2 focus-visible:ring-ring"
-            >
-              <option value="">
-                {userOptionsLoading ? "Loading users..." : "Choose a registered user"}
-              </option>
-              {userOptions.map((option) => (
-                <option key={option.id} value={option.id}>
-                  @{option.display_name}
-                </option>
-              ))}
-            </select>
+            <label className="text-xs font-black uppercase text-primary">
+              Search a registered user *
+            </label>
+            <div className="rounded-2xl border border-input bg-background p-2">
+              {selectedUser ? (
+                <div className="flex min-h-11 items-center justify-between gap-3 rounded-xl bg-muted px-3">
+                  <span className="min-w-0 truncate text-sm font-black">
+                    @{selectedUser.display_name}
+                  </span>
+                  <button
+                    type="button"
+                    onClick={() => {
+                      setTargetUserId("");
+                      setUserSearch("");
+                    }}
+                    className="flex size-8 shrink-0 items-center justify-center rounded-full text-muted-foreground hover:text-foreground"
+                    aria-label="Clear selected user"
+                  >
+                    <X className="size-4" />
+                  </button>
+                </div>
+              ) : (
+                <>
+                  <div className="relative">
+                    <Search className="absolute left-3 top-1/2 size-4 -translate-y-1/2 text-muted-foreground" />
+                    <Input
+                      value={userSearch}
+                      onChange={(event) => setUserSearch(event.target.value)}
+                      disabled={userOptionsLoading}
+                      placeholder={
+                        userOptionsLoading ? "Loading registered users..." : "Search by name"
+                      }
+                      className="h-11 rounded-xl border-0 bg-muted pl-9 pr-3 font-semibold"
+                    />
+                  </div>
+
+                  <div className="mt-2 max-h-40 space-y-1 overflow-y-auto">
+                    {filteredUserOptions.slice(0, 12).map((option) => (
+                      <button
+                        key={option.id}
+                        type="button"
+                        onClick={() => {
+                          setTargetUserId(option.id);
+                          setUserSearch(option.display_name);
+                        }}
+                        className="flex min-h-10 w-full items-center justify-between gap-3 rounded-xl px-3 text-left text-sm font-semibold hover:bg-muted"
+                      >
+                        <span className="min-w-0 truncate">@{option.display_name}</span>
+                        <CheckCircle2 className="size-4 shrink-0 text-primary" />
+                      </button>
+                    ))}
+
+                    {!userOptionsLoading && userOptions.length > 0 && filteredUserOptions.length === 0 && (
+                      <p className="px-3 py-2 text-xs font-semibold text-muted-foreground">
+                        No registered user matches that search.
+                      </p>
+                    )}
+                  </div>
+                </>
+              )}
+            </div>
             {!userOptionsLoading && userOptions.length === 0 && (
               <p className="text-xs font-semibold text-muted-foreground">
-                No other users are available to tag yet.
+                No opposite-gender users are available to tag yet.
               </p>
             )}
           </div>
@@ -402,16 +472,18 @@ export function UploadDialog({
             variant="outline"
             onClick={tagLocation}
             disabled={locLoading}
-            className="w-full rounded-full h-10 gap-2"
+            className="h-10 w-full min-w-0 overflow-hidden rounded-full gap-2 px-4"
           >
             {locLoading ? (
-              <Loader2 className="size-4 animate-spin" />
+              <Loader2 className="size-4 shrink-0 animate-spin" />
             ) : (
-              <MapPin className="size-4" />
+              <MapPin className="size-4 shrink-0" />
             )}
-            {loc
-              ? (loc.label ?? `${loc.lat.toFixed(3)}, ${loc.lng.toFixed(3)}`)
-              : "Tag photo location"}
+            <span className="min-w-0 truncate">
+              {loc
+                ? (loc.label ?? `${loc.lat.toFixed(3)}, ${loc.lng.toFixed(3)}`)
+                : "Tag photo location"}
+            </span>
           </Button>
 
           <div className="border-y border-border py-3">
