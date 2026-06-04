@@ -5,6 +5,7 @@ import { Checkbox } from "@/components/ui/checkbox";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { CommunityGuidelinesList } from "@/components/CommunityGuidelines";
+import { createConfirmedAccount } from "@/functions/auth.functions";
 import { COMMUNITY_GUIDELINES_VERSION } from "@/lib/community-guidelines";
 import { ChevronDown } from "lucide-react";
 import { toast } from "sonner";
@@ -42,6 +43,23 @@ export function AuthGate() {
     }
   }
 
+  async function signInCreatedAccount(agreedAt: string, normalizedEmail: string) {
+    const { data, error } = await supabase.auth.signInWithPassword({
+      email: normalizedEmail,
+      password,
+    });
+
+    if (error) {
+      throw error;
+    }
+
+    if (data.user) {
+      await saveSignupConfirmations(data.user.id, agreedAt);
+    }
+
+    toast.success("Account created. Confirm you are 18+ to enter.");
+  }
+
   async function startSignup() {
     if (!guidelinesOpened) {
       toast.error("Please open the Community Guidelines before entering.");
@@ -56,24 +74,20 @@ export function AuthGate() {
     setLoading(true);
     try {
       const agreedAt = new Date().toISOString();
-      const { data, error } = await supabase.auth.signUp({
-        email,
-        password,
-        options: {
-          data: {
-            display_name: displayName || email.split("@")[0],
-            community_guidelines_agreed: true,
-            community_guidelines_agreed_at: agreedAt,
-            community_guidelines_version: COMMUNITY_GUIDELINES_VERSION,
-          },
-          emailRedirectTo: `${window.location.origin}/`,
+      const normalizedEmail = email.trim().toLowerCase();
+      const normalizedDisplayName = displayName.trim() || normalizedEmail.split("@")[0];
+
+      await createConfirmedAccount({
+        data: {
+          email: normalizedEmail,
+          password,
+          displayName: normalizedDisplayName,
+          communityGuidelinesAgreedAt: agreedAt,
+          communityGuidelinesVersion: COMMUNITY_GUIDELINES_VERSION,
         },
       });
-      if (error) throw error;
-      if (data.user && data.session) {
-        await saveSignupConfirmations(data.user.id, agreedAt);
-      }
-      toast.success("Account created. Verify your ID to enter.");
+
+      await signInCreatedAccount(agreedAt, normalizedEmail);
     } catch (err) {
       toast.error(getErrorMessage(err, "Something went wrong"));
     } finally {
@@ -152,7 +166,17 @@ export function AuthGate() {
               />
             </div>
             <div>
-              <Label htmlFor="password">Password</Label>
+              <div className="flex items-center justify-between gap-3">
+                <Label htmlFor="password">Password</Label>
+                {mode === "signin" && (
+                  <a
+                    href="/forgot-password"
+                    className="text-xs font-semibold text-primary underline-offset-4 hover:underline"
+                  >
+                    Forgot password?
+                  </a>
+                )}
+              </div>
               <Input
                 id="password"
                 type="password"

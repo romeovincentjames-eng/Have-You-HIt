@@ -1,5 +1,7 @@
 import { supabaseAdmin } from "@/integrations/supabase/client.server";
 import { isAtLeast18 } from "@/lib/age-verification";
+import { readServerEnv } from "@/lib/server-env";
+import type { User } from "@supabase/supabase-js";
 
 type StripeDob = {
   day: number;
@@ -18,11 +20,17 @@ type StripeIdentityVerificationSession = {
 };
 
 function getStripeIdentityConfig() {
-  const stripeSecretKey = process.env.STRIPE_SECRET_KEY;
-  const publicSiteUrl = process.env.PUBLIC_SITE_URL;
+  const stripeSecretKey = readServerEnv("STRIPE_SECRET_KEY", {
+    isValid: (value) => value.startsWith("sk_"),
+  });
+  const publicSiteUrl = readServerEnv("PUBLIC_SITE_URL");
 
   if (!stripeSecretKey) {
     throw new Error("Missing STRIPE_SECRET_KEY. Add your Stripe secret key for ID checks.");
+  }
+
+  if (!stripeSecretKey.startsWith("sk_")) {
+    throw new Error("STRIPE_SECRET_KEY must be a Stripe secret key that starts with sk_.");
   }
 
   return { stripeSecretKey, publicSiteUrl };
@@ -73,12 +81,70 @@ function dobToDate(dob: StripeDob | null | undefined) {
   return valid ? date : null;
 }
 
+async function getAuthUser(userId: string) {
+  const { data, error } = await supabaseAdmin.auth.admin.getUserById(userId);
+  if (error) throw error;
+  return data.user;
+}
+
+function getUserMetadata(user: User | null) {
+  return user?.user_metadata && typeof user.user_metadata === "object" ? user.user_metadata : {};
+}
+
+function getDisplayName(user: User | null) {
+  const metadata = getUserMetadata(user);
+  const metadataName = metadata.display_name;
+
+  if (typeof metadataName === "string" && metadataName.trim()) {
+    return metadataName.trim();
+  }
+
+  return user?.email?.split("@")[0] || "Member";
+}
+
+async function ensureProfileRow(userId: string) {
+  const user = await getAuthUser(userId);
+
+  const { error } = await supabaseAdmin.from("profiles").upsert(
+    {
+      id: userId,
+      display_name: getDisplayName(user),
+    },
+    {
+      onConflict: "id",
+      ignoreDuplicates: true,
+    },
+  );
+
+  if (error) throw error;
+  return user;
+}
+
+async function saveAgeVerificationToAuthUser(
+  userId: string,
+  user: User | null,
+  ageVerifiedAt: string,
+) {
+  const { error } = await supabaseAdmin.auth.admin.updateUserById(userId, {
+    user_metadata: {
+      ...getUserMetadata(user),
+      confirmed_18_plus: true,
+      age_verified_at: ageVerifiedAt,
+      age_verification_method: "stripe_identity",
+      stripe_identity_verified_at: ageVerifiedAt,
+    },
+  });
+
+  if (error) throw error;
+}
+
 async function updateIdentityStatus(options: {
   userId: string;
   sessionId: string;
   status: string;
   ageVerifiedAt?: string | null;
 }) {
+  const user = await ensureProfileRow(options.userId);
   const { error } = await supabaseAdmin
     .from("profiles")
     .update({
@@ -96,6 +162,10 @@ async function updateIdentityStatus(options: {
     .eq("id", options.userId);
 
   if (error) throw error;
+
+  if (options.ageVerifiedAt) {
+    await saveAgeVerificationToAuthUser(options.userId, user, options.ageVerifiedAt);
+  }
 }
 
 async function applyIdentitySession(session: StripeIdentityVerificationSession) {

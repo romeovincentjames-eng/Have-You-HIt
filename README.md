@@ -46,12 +46,12 @@ Add these environment variables before taking real payments:
 
 ```text
 STRIPE_SECRET_KEY=sk_test_...
-STRIPE_PRICE_ID=price_...
+STRIPE_PRICE_ID=price_1TeYmyAerhfqgEjd16F7tja3
 STRIPE_WEBHOOK_SECRET=whsec_...
 SUPABASE_SERVICE_ROLE_KEY=...
 PUBLIC_SITE_URL=https://your-live-domain.com
-STRIPE_CHECKOUT_MODE=payment
-VITE_MEMBERSHIP_PRICE_LABEL=$4.99
+STRIPE_CHECKOUT_MODE=subscription
+VITE_MEMBERSHIP_PRICE_LABEL=$4.99/mo
 ```
 
 Use `STRIPE_CHECKOUT_MODE=payment` for a one-time unlock, or `STRIPE_CHECKOUT_MODE=subscription` for a recurring Stripe Price.
@@ -73,4 +73,5 @@ customer.subscription.deleted
 ```
 
 The app also confirms a successful Checkout Session when Stripe redirects the user back, so local testing works before the webhook is public.
+Stripe Identity ID scanning is currently hidden in the app. The age gate uses a saved 18+ self-confirmation instead.
 # Have-You-HIt

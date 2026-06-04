@@ -17,10 +17,6 @@ import { PaymentGate, SubscribeButton } from "@/components/PaymentGate";
 import { UploadDialog } from "@/components/UploadDialog";
 import { PostCard } from "@/components/PostCard";
 import { CommunityGuidelinesDialog } from "@/components/CommunityGuidelines";
-import {
-  createIdentityVerificationSession,
-  syncIdentityVerificationSession,
-} from "@/functions/identity.functions";
 import { useUsageLimits } from "@/hooks/use-usage-limits";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
@@ -56,6 +52,16 @@ type Post = {
 
 const NEARBY_KM = 80;
 
+function getSavedAgeVerifiedAt(user: { user_metadata?: Record<string, unknown> } | null) {
+  const metadata = user?.user_metadata ?? {};
+  const ageVerifiedAt = metadata.age_verified_at;
+  const stripeVerifiedAt = metadata.stripe_identity_verified_at;
+
+  if (typeof ageVerifiedAt === "string" && ageVerifiedAt) return ageVerifiedAt;
+  if (typeof stripeVerifiedAt === "string" && stripeVerifiedAt) return stripeVerifiedAt;
+  return null;
+}
+
 function distanceKm(a: { lat: number; lng: number }, b: { lat: number; lng: number }) {
   const R = 6371;
   const dLat = ((b.lat - a.lat) * Math.PI) / 180;
@@ -84,10 +90,9 @@ function Index() {
   );
   const [membershipActive, setMembershipActive] = useState(false);
   const [limitNotice, setLimitNotice] = useState("");
-  const [identityBusy, setIdentityBusy] = useState(false);
+  const [ageConfirmBusy, setAgeConfirmBusy] = useState(false);
 
   const usageLimits = useUsageLimits(user?.id, membershipActive);
-  const identityReturnHandled = useRef(false);
 
   const [pullY, setPullY] = useState(0);
   const [refreshing, setRefreshing] = useState(false);
@@ -102,6 +107,8 @@ function Index() {
       return;
     }
 
+    const savedAgeVerifiedAt = getSavedAgeVerifiedAt(user);
+
     supabase
       .from("profiles")
       .select("gender,age_verified_at,community_guidelines_agreed_at")
@@ -109,7 +116,7 @@ function Index() {
       .maybeSingle()
       .then(({ data }) => {
         setGender((data?.gender as string | null) ?? null);
-        setAgeVerifiedAt(data?.age_verified_at ?? null);
+        setAgeVerifiedAt(data?.age_verified_at ?? savedAgeVerifiedAt);
         setGuidelinesAgreedAt(data?.community_guidelines_agreed_at ?? null);
       });
   }, [user]);
@@ -173,48 +180,50 @@ function Index() {
     setMembershipActive(active);
   }, []);
 
-  const startIdentityVerification = useCallback(async () => {
-    setIdentityBusy(true);
+  const confirmAdultAge = useCallback(async () => {
+    if (!user) return;
+
+    setAgeConfirmBusy(true);
 
     try {
-      const { url } = await createIdentityVerificationSession({
-        data: { origin: window.location.origin },
+      const confirmedAt = new Date().toISOString();
+      const displayName =
+        typeof user.user_metadata?.display_name === "string" &&
+        user.user_metadata.display_name.trim()
+          ? user.user_metadata.display_name.trim()
+          : user.email?.split("@")[0] || "Member";
+
+      const { error: profileError } = await supabase.from("profiles").upsert({
+        id: user.id,
+        display_name: displayName,
+        gender: "confirmed_18_plus",
+        age_verified_at: confirmedAt,
+        age_verification_method: "self_confirmation",
       });
-      window.location.assign(url);
+
+      if (profileError) throw profileError;
+
+      const { error: authError } = await supabase.auth.updateUser({
+        data: {
+          ...user.user_metadata,
+          confirmed_18_plus: true,
+          age_verified_at: confirmedAt,
+          age_verification_method: "self_confirmation",
+        },
+      });
+
+      if (authError) throw authError;
+
+      setGender("confirmed_18_plus");
+      setAgeVerifiedAt(confirmedAt);
+      await supabase.auth.refreshSession();
+      toast.success("18+ confirmed. Welcome in.");
     } catch (err) {
-      toast.error(err instanceof Error ? err.message : "Could not start ID verification.");
-      setIdentityBusy(false);
-    }
-  }, []);
-
-  const syncIdentityVerification = useCallback(async () => {
-    setIdentityBusy(true);
-
-    try {
-      const result = await syncIdentityVerificationSession();
-
-      if (result.verified && result.ageVerifiedAt) {
-        setGender("confirmed_18_plus");
-        setAgeVerifiedAt(result.ageVerifiedAt);
-        toast.success("ID verified. Welcome in.");
-      }
-    } catch (err) {
-      toast.error(err instanceof Error ? err.message : "Could not confirm ID verification yet.");
+      toast.error(err instanceof Error ? err.message : "Could not save your 18+ confirmation.");
     } finally {
-      window.history.replaceState({}, "", window.location.pathname);
-      setIdentityBusy(false);
+      setAgeConfirmBusy(false);
     }
-  }, []);
-
-  useEffect(() => {
-    if (!user || identityReturnHandled.current) return;
-
-    const params = new URLSearchParams(window.location.search);
-    if (params.get("identity") !== "return") return;
-
-    identityReturnHandled.current = true;
-    void syncIdentityVerification();
-  }, [syncIdentityVerification, user]);
+  }, [user]);
 
   const promptSubscribeForLimit = useCallback((message: string) => {
     setLimitNotice(message);
@@ -403,11 +412,11 @@ function Index() {
   if (!ageVerifiedAt)
     return (
       <AgeVerificationGate
-        title="Verify your age"
-        body="Stripe Identity will verify your ID and confirm your date of birth is 18+."
-        actionLabel="Start Stripe Identity"
-        busy={identityBusy}
-        onStartIdentity={startIdentityVerification}
+        title="Confirm you are 18+"
+        body="Confirm that you are at least 18 years old before entering."
+        actionLabel="I confirm I am 18+"
+        busy={ageConfirmBusy}
+        onConfirm={confirmAdultAge}
         onSignOut={() => supabase.auth.signOut()}
       />
     );

@@ -1,26 +1,26 @@
 import { Button } from "@/components/ui/button";
-import { IdCard, Loader2, ShieldCheck } from "lucide-react";
+import { Loader2, ShieldCheck } from "lucide-react";
 
 export function AgeVerificationGate({
-  title = "Verify your age",
-  body = "Use secure ID verification before entering.",
-  actionLabel = "Start secure ID check",
+  title = "Confirm your age",
+  body = "Confirm that you are at least 18 years old before entering.",
+  actionLabel = "I confirm I am 18+",
   busy = false,
-  onStartIdentity,
+  onConfirm,
   onSignOut,
 }: {
   title?: string;
   body?: string;
   actionLabel?: string;
   busy?: boolean;
-  onStartIdentity: () => Promise<void> | void;
+  onConfirm: () => Promise<void> | void;
   onSignOut?: () => void;
 }) {
   return (
     <div className="min-h-screen flex items-center justify-center p-4">
       <div className="max-w-md w-full bg-card border border-border rounded-3xl p-6 shadow-xl shadow-primary/5">
         <div className="size-14 rounded-2xl bg-primary/10 text-primary flex items-center justify-center mb-4">
-          <IdCard className="size-7" />
+          <ShieldCheck className="size-7" />
         </div>
 
         <h1 className="font-display text-3xl font-black mb-2">{title}</h1>
@@ -31,10 +31,10 @@ export function AgeVerificationGate({
             <ShieldCheck className="mt-0.5 size-5 shrink-0 text-primary" />
             <div>
               <p className="text-sm font-semibold text-foreground">
-                Third-party ID check powered by Stripe Identity
+                No ID scan is required right now
               </p>
               <p className="mt-1 text-xs text-muted-foreground">
-                Stripe checks the ID and date of birth. This app saves only the verification result.
+                This saves your one-time 18+ confirmation for this account.
               </p>
             </div>
           </div>
@@ -42,12 +42,12 @@ export function AgeVerificationGate({
 
         <Button
           type="button"
-          onClick={onStartIdentity}
+          onClick={onConfirm}
           disabled={busy}
           className="w-full rounded-full h-12 gap-2 font-semibold"
         >
-          {busy ? <Loader2 className="size-4 animate-spin" /> : <IdCard className="size-4" />}
-          {busy ? "Opening..." : actionLabel}
+          {busy ? <Loader2 className="size-4 animate-spin" /> : <ShieldCheck className="size-4" />}
+          {busy ? "Saving..." : actionLabel}
         </Button>
 
         {onSignOut && (

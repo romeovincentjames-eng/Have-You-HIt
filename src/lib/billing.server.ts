@@ -1,4 +1,5 @@
 import { supabaseAdmin } from "@/integrations/supabase/client.server";
+import { readServerEnv } from "@/lib/server-env";
 
 type CheckoutMode = "payment" | "subscription";
 
@@ -41,15 +42,21 @@ type MembershipUpsert = {
 };
 
 function getBillingConfig() {
-  const stripeSecretKey = process.env.STRIPE_SECRET_KEY;
-  const stripePriceId = process.env.STRIPE_PRICE_ID;
-  const publicSiteUrl = process.env.PUBLIC_SITE_URL;
-  const checkoutMode = (process.env.STRIPE_CHECKOUT_MODE || "payment") as CheckoutMode;
+  const stripeSecretKey = readServerEnv("STRIPE_SECRET_KEY", {
+    isValid: (value) => value.startsWith("sk_"),
+  });
+  const stripePriceId = readServerEnv("STRIPE_PRICE_ID");
+  const publicSiteUrl = readServerEnv("PUBLIC_SITE_URL");
+  const checkoutMode = (readServerEnv("STRIPE_CHECKOUT_MODE") || "payment") as CheckoutMode;
 
   if (!stripeSecretKey) {
     throw new Error(
       "Missing STRIPE_SECRET_KEY. Add your Stripe secret key before taking payments.",
     );
+  }
+
+  if (!stripeSecretKey.startsWith("sk_")) {
+    throw new Error("STRIPE_SECRET_KEY must be a Stripe secret key that starts with sk_.");
   }
 
   if (!stripePriceId) {
@@ -306,7 +313,7 @@ export async function handleStripeEvent(event: StripeEvent) {
 }
 
 export async function verifyStripeSignature(payload: string, signatureHeader: string | null) {
-  const signingSecret = process.env.STRIPE_WEBHOOK_SECRET;
+  const signingSecret = readServerEnv("STRIPE_WEBHOOK_SECRET");
   if (!signingSecret) {
     throw new Error("Missing STRIPE_WEBHOOK_SECRET.");
   }
