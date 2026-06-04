@@ -6,7 +6,7 @@ import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { CommunityGuidelinesList } from "@/components/CommunityGuidelines";
 import { COMMUNITY_GUIDELINES_VERSION } from "@/lib/community-guidelines";
-import { ShieldCheck } from "lucide-react";
+import { ChevronDown, ShieldCheck } from "lucide-react";
 import { toast } from "sonner";
 
 const ADULT_CONFIRMATION = "confirmed_18_plus";
@@ -21,8 +21,15 @@ export function AuthGate() {
   const [password, setPassword] = useState("");
   const [displayName, setDisplayName] = useState("");
   const [adultConfirmed, setAdultConfirmed] = useState(false);
+  const [guidelinesOpened, setGuidelinesOpened] = useState(false);
+  const [guidelinesExpanded, setGuidelinesExpanded] = useState(false);
   const [guidelinesAgreed, setGuidelinesAgreed] = useState(false);
   const [loading, setLoading] = useState(false);
+
+  function toggleGuidelines() {
+    setGuidelinesOpened(true);
+    setGuidelinesExpanded((current) => !current);
+  }
 
   async function saveSignupConfirmations(userId: string, agreedAt: string) {
     const { error } = await supabase
@@ -44,6 +51,11 @@ export function AuthGate() {
 
     if (mode === "signup" && !adultConfirmed) {
       toast.error("Please confirm you are 18 or older before entering.");
+      return;
+    }
+
+    if (mode === "signup" && !guidelinesOpened) {
+      toast.error("Please open the Community Guidelines before entering.");
       return;
     }
 
@@ -152,17 +164,40 @@ export function AuthGate() {
 
             {mode === "signup" && (
               <div className="border-y border-border py-3">
-                <p className="mb-1 text-xs font-black uppercase text-primary">
-                  Community Guidelines
-                </p>
-                <CommunityGuidelinesList compact />
+                <button
+                  type="button"
+                  onClick={toggleGuidelines}
+                  aria-expanded={guidelinesExpanded}
+                  className="flex w-full items-center justify-between gap-3 rounded-2xl px-1 py-2 text-left text-primary"
+                >
+                  <span>
+                    <span className="block text-xs font-black uppercase">Community Guidelines</span>
+                    <span className="mt-1 block text-sm font-semibold text-foreground">
+                      Open and read before joining.
+                    </span>
+                  </span>
+                  <ChevronDown
+                    className={`size-5 shrink-0 transition-transform ${
+                      guidelinesExpanded ? "rotate-180" : ""
+                    }`}
+                  />
+                </button>
+
+                {guidelinesExpanded && <CommunityGuidelinesList compact className="mt-2" />}
               </div>
             )}
 
             {mode === "signup" && (
-              <label className="flex items-start gap-3 rounded-2xl border-2 border-primary bg-primary/10 p-4 cursor-pointer">
+              <label
+                className={`flex items-start gap-3 rounded-2xl border-2 p-4 ${
+                  guidelinesOpened
+                    ? "cursor-pointer border-primary bg-primary/10"
+                    : "cursor-not-allowed border-border bg-muted/60 opacity-70"
+                }`}
+              >
                 <Checkbox
                   checked={guidelinesAgreed}
+                  disabled={!guidelinesOpened}
                   onCheckedChange={(value) => setGuidelinesAgreed(value === true)}
                   className="mt-1 size-5"
                   aria-label="Agree to follow the Community Guidelines"
@@ -173,7 +208,9 @@ export function AuthGate() {
                     I agree to follow the Community Guidelines
                   </span>
                   <span className="mt-2 block text-sm font-semibold text-foreground">
-                    I will keep posts factual, private, respectful, clean, and 18+.
+                    {guidelinesOpened
+                      ? "I will keep posts factual, private, respectful, clean, and 18+."
+                      : "Open the guidelines above before checking this."}
                   </span>
                 </span>
               </label>
@@ -204,7 +241,10 @@ export function AuthGate() {
 
             <Button
               type="submit"
-              disabled={loading || (mode === "signup" && (!adultConfirmed || !guidelinesAgreed))}
+              disabled={
+                loading ||
+                (mode === "signup" && (!adultConfirmed || !guidelinesOpened || !guidelinesAgreed))
+              }
               className="w-full rounded-full h-11 text-base font-semibold"
             >
               {loading ? "..." : mode === "signup" ? "Start hitting" : "Let me in"}
