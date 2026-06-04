@@ -2,13 +2,14 @@ import { createFileRoute } from "@tanstack/react-router";
 import { useEffect, useMemo, useState, useCallback, useRef, type TouchEvent } from "react";
 import { supabase } from "@/integrations/supabase/client";
 import { useAuth } from "@/hooks/use-auth";
+import { AgeVerificationGate } from "@/components/AgeVerificationGate";
 import { AuthGate } from "@/components/AuthGate";
-import { GenderGate } from "@/components/GenderGate";
 import { GuidelinesGate } from "@/components/GuidelinesGate";
 import { PaymentGate } from "@/components/PaymentGate";
 import { UploadDialog } from "@/components/UploadDialog";
 import { PostCard } from "@/components/PostCard";
 import { CommunityGuidelinesDialog } from "@/components/CommunityGuidelines";
+import { ADULT_CONFIRMATION, type AgeVerificationResult } from "@/lib/age-verification";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { LogOut, Search, MapPin, X } from "lucide-react";
@@ -64,6 +65,7 @@ function Index() {
   const [myLoc, setMyLoc] = useState<{ lat: number; lng: number } | null>(null);
   const [nearby, setNearby] = useState(false);
   const [gender, setGender] = useState<string | null | undefined>(undefined);
+  const [ageVerifiedAt, setAgeVerifiedAt] = useState<string | null | undefined>(undefined);
   const [guidelinesAgreedAt, setGuidelinesAgreedAt] = useState<string | null | undefined>(
     undefined,
   );
@@ -76,6 +78,7 @@ function Index() {
   useEffect(() => {
     if (!user) {
       setGender(undefined);
+      setAgeVerifiedAt(undefined);
       setGuidelinesAgreedAt(undefined);
       setMembershipActive(false);
       return;
@@ -83,11 +86,12 @@ function Index() {
 
     supabase
       .from("profiles")
-      .select("gender,community_guidelines_agreed_at")
+      .select("gender,age_verified_at,community_guidelines_agreed_at")
       .eq("id", user.id)
       .maybeSingle()
       .then(({ data }) => {
         setGender((data?.gender as string | null) ?? null);
+        setAgeVerifiedAt(data?.age_verified_at ?? null);
         setGuidelinesAgreedAt(data?.community_guidelines_agreed_at ?? null);
       });
   }, [user]);
@@ -150,6 +154,30 @@ function Index() {
   const handleMembershipActive = useCallback(() => {
     setMembershipActive(true);
   }, []);
+
+  const handleAgeVerified = useCallback(
+    async (verification: AgeVerificationResult) => {
+      if (!user) return;
+
+      const { error } = await supabase
+        .from("profiles")
+        .update({
+          gender: ADULT_CONFIRMATION,
+          age_verified_at: verification.verifiedAt,
+          age_verification_method: verification.method,
+        })
+        .eq("id", user.id);
+
+      if (error) {
+        toast.error(error.message);
+        return;
+      }
+
+      setGender(ADULT_CONFIRMATION);
+      setAgeVerifiedAt(verification.verifiedAt);
+    },
+    [user],
+  );
 
   function handleTouchStart(e: TouchEvent<HTMLDivElement>) {
     if (window.scrollY === 0) {
@@ -242,8 +270,17 @@ function Index() {
   if (loading) return <div className="min-h-screen" />;
   if (!user) return <AuthGate />;
   if (gender === undefined) return <div className="min-h-screen" />;
-  if (!gender)
-    return <GenderGate userId={user.id} onConfirmed={() => setGender("confirmed_18_plus")} />;
+  if (ageVerifiedAt === undefined) return <div className="min-h-screen" />;
+  if (!ageVerifiedAt)
+    return (
+      <AgeVerificationGate
+        title="Verify your age"
+        body="Scan your ID before entering the home page."
+        actionLabel="Enter Have You Hit"
+        onVerified={handleAgeVerified}
+        onSignOut={() => supabase.auth.signOut()}
+      />
+    );
   if (guidelinesAgreedAt === undefined) return <div className="min-h-screen" />;
   if (!guidelinesAgreedAt)
     return <GuidelinesGate userId={user.id} onConfirmed={setGuidelinesAgreedAt} />;

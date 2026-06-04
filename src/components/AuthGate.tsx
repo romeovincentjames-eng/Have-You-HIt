@@ -1,15 +1,15 @@
 import { useState } from "react";
 import { supabase } from "@/integrations/supabase/client";
+import { AgeVerificationGate } from "@/components/AgeVerificationGate";
 import { Button } from "@/components/ui/button";
 import { Checkbox } from "@/components/ui/checkbox";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { CommunityGuidelinesList } from "@/components/CommunityGuidelines";
+import { ADULT_CONFIRMATION, type AgeVerificationResult } from "@/lib/age-verification";
 import { COMMUNITY_GUIDELINES_VERSION } from "@/lib/community-guidelines";
-import { ChevronDown, ShieldCheck } from "lucide-react";
+import { ChevronDown } from "lucide-react";
 import { toast } from "sonner";
-
-const ADULT_CONFIRMATION = "confirmed_18_plus";
 
 function getErrorMessage(error: unknown, fallback: string) {
   return error instanceof Error ? error.message : fallback;
@@ -20,10 +20,10 @@ export function AuthGate() {
   const [email, setEmail] = useState("");
   const [password, setPassword] = useState("");
   const [displayName, setDisplayName] = useState("");
-  const [adultConfirmed, setAdultConfirmed] = useState(false);
   const [guidelinesOpened, setGuidelinesOpened] = useState(false);
   const [guidelinesExpanded, setGuidelinesExpanded] = useState(false);
   const [guidelinesAgreed, setGuidelinesAgreed] = useState(false);
+  const [showIdCheck, setShowIdCheck] = useState(false);
   const [loading, setLoading] = useState(false);
 
   function toggleGuidelines() {
@@ -31,13 +31,19 @@ export function AuthGate() {
     setGuidelinesExpanded((current) => !current);
   }
 
-  async function saveSignupConfirmations(userId: string, agreedAt: string) {
+  async function saveSignupConfirmations(
+    userId: string,
+    agreedAt: string,
+    verification: AgeVerificationResult,
+  ) {
     const { error } = await supabase
       .from("profiles")
       .update({
         gender: ADULT_CONFIRMATION,
         community_guidelines_agreed_at: agreedAt,
         community_guidelines_version: COMMUNITY_GUIDELINES_VERSION,
+        age_verified_at: verification.verifiedAt,
+        age_verification_method: verification.method,
       })
       .eq("id", userId);
 
@@ -46,57 +52,83 @@ export function AuthGate() {
     }
   }
 
-  async function handleSubmit(e: React.FormEvent) {
-    e.preventDefault();
-
-    if (mode === "signup" && !adultConfirmed) {
-      toast.error("Please confirm you are 18 or older before entering.");
-      return;
-    }
-
-    if (mode === "signup" && !guidelinesOpened) {
+  function startSignup() {
+    if (!guidelinesOpened) {
       toast.error("Please open the Community Guidelines before entering.");
       return;
     }
 
-    if (mode === "signup" && !guidelinesAgreed) {
+    if (!guidelinesAgreed) {
       toast.error("Please agree to the Community Guidelines before entering.");
       return;
     }
 
+    setShowIdCheck(true);
+  }
+
+  async function createAccountAfterAgeCheck(verification: AgeVerificationResult) {
     setLoading(true);
     try {
-      if (mode === "signup") {
-        const agreedAt = new Date().toISOString();
-        const { data, error } = await supabase.auth.signUp({
-          email,
-          password,
-          options: {
-            data: {
-              display_name: displayName || email.split("@")[0],
-              confirmed_18_plus: true,
-              confirmed_18_plus_at: agreedAt,
-              community_guidelines_agreed: true,
-              community_guidelines_agreed_at: agreedAt,
-              community_guidelines_version: COMMUNITY_GUIDELINES_VERSION,
-            },
-            emailRedirectTo: `${window.location.origin}/`,
+      const agreedAt = new Date().toISOString();
+      const { data, error } = await supabase.auth.signUp({
+        email,
+        password,
+        options: {
+          data: {
+            display_name: displayName || email.split("@")[0],
+            confirmed_18_plus: true,
+            confirmed_18_plus_at: verification.verifiedAt,
+            age_verified_at: verification.verifiedAt,
+            age_verification_method: verification.method,
+            community_guidelines_agreed: true,
+            community_guidelines_agreed_at: agreedAt,
+            community_guidelines_version: COMMUNITY_GUIDELINES_VERSION,
           },
-        });
-        if (error) throw error;
-        if (data.user && data.session) {
-          await saveSignupConfirmations(data.user.id, agreedAt);
-        }
-        toast.success("Welcome to the group chat");
-      } else {
-        const { error } = await supabase.auth.signInWithPassword({ email, password });
-        if (error) throw error;
+          emailRedirectTo: `${window.location.origin}/`,
+        },
+      });
+      if (error) throw error;
+      if (data.user && data.session) {
+        await saveSignupConfirmations(data.user.id, agreedAt, verification);
       }
+      toast.success("Welcome to the group chat");
     } catch (err) {
       toast.error(getErrorMessage(err, "Something went wrong"));
     } finally {
       setLoading(false);
     }
+  }
+
+  async function handleSubmit(e: React.FormEvent) {
+    e.preventDefault();
+
+    if (mode === "signup") {
+      startSignup();
+      return;
+    }
+
+    setLoading(true);
+    try {
+      const { error } = await supabase.auth.signInWithPassword({ email, password });
+      if (error) throw error;
+    } catch (err) {
+      toast.error(getErrorMessage(err, "Something went wrong"));
+    } finally {
+      setLoading(false);
+    }
+  }
+
+  if (showIdCheck && mode === "signup") {
+    return (
+      <AgeVerificationGate
+        title="Scan your ID"
+        body="Before your account is created, verify that you are 18 or older."
+        actionLabel="Create my account"
+        busy={loading}
+        onBack={() => setShowIdCheck(false)}
+        onVerified={createAccountAfterAgeCheck}
+      />
+    );
   }
 
   return (
@@ -216,35 +248,9 @@ export function AuthGate() {
               </label>
             )}
 
-            {mode === "signup" && (
-              <label className="flex items-start gap-3 rounded-2xl border-2 border-primary bg-primary/10 p-4 cursor-pointer">
-                <Checkbox
-                  checked={adultConfirmed}
-                  onCheckedChange={(value) => setAdultConfirmed(value === true)}
-                  className="mt-1 size-5"
-                  aria-label="Confirm you are 18 years old or older"
-                />
-
-                <span>
-                  <span className="flex items-center gap-2 text-primary">
-                    <ShieldCheck className="size-5 shrink-0" />
-                    <span className="text-xl font-black uppercase leading-tight">
-                      I confirm I am 18 years old or older
-                    </span>
-                  </span>
-                  <span className="mt-2 block text-sm font-semibold text-foreground">
-                    I understand this app is for adults only.
-                  </span>
-                </span>
-              </label>
-            )}
-
             <Button
               type="submit"
-              disabled={
-                loading ||
-                (mode === "signup" && (!adultConfirmed || !guidelinesOpened || !guidelinesAgreed))
-              }
+              disabled={loading || (mode === "signup" && (!guidelinesOpened || !guidelinesAgreed))}
               className="w-full rounded-full h-11 text-base font-semibold"
             >
               {loading ? "..." : mode === "signup" ? "Start hitting" : "Let me in"}

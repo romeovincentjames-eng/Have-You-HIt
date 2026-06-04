@@ -146,6 +146,8 @@ export type Database = {
       };
       profiles: {
         Row: {
+          age_verification_method: string | null;
+          age_verified_at: string | null;
           avatar_url: string | null;
           community_guidelines_agreed_at: string | null;
           community_guidelines_version: string | null;
@@ -155,6 +157,8 @@ export type Database = {
           id: string;
         };
         Insert: {
+          age_verification_method?: string | null;
+          age_verified_at?: string | null;
           avatar_url?: string | null;
           community_guidelines_agreed_at?: string | null;
           community_guidelines_version?: string | null;
@@ -164,6 +168,8 @@ export type Database = {
           id: string;
         };
         Update: {
+          age_verification_method?: string | null;
+          age_verified_at?: string | null;
           avatar_url?: string | null;
           community_guidelines_agreed_at?: string | null;
           community_guidelines_version?: string | null;
