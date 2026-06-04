@@ -1,12 +1,10 @@
-import { useState } from "react";
+import { useState, type FormEvent } from "react";
 import { supabase } from "@/integrations/supabase/client";
-import { AgeVerificationGate } from "@/components/AgeVerificationGate";
 import { Button } from "@/components/ui/button";
 import { Checkbox } from "@/components/ui/checkbox";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { CommunityGuidelinesList } from "@/components/CommunityGuidelines";
-import { ADULT_CONFIRMATION, type AgeVerificationResult } from "@/lib/age-verification";
 import { COMMUNITY_GUIDELINES_VERSION } from "@/lib/community-guidelines";
 import { ChevronDown } from "lucide-react";
 import { toast } from "sonner";
@@ -23,7 +21,6 @@ export function AuthGate() {
   const [guidelinesOpened, setGuidelinesOpened] = useState(false);
   const [guidelinesExpanded, setGuidelinesExpanded] = useState(false);
   const [guidelinesAgreed, setGuidelinesAgreed] = useState(false);
-  const [showIdCheck, setShowIdCheck] = useState(false);
   const [loading, setLoading] = useState(false);
 
   function toggleGuidelines() {
@@ -31,19 +28,12 @@ export function AuthGate() {
     setGuidelinesExpanded((current) => !current);
   }
 
-  async function saveSignupConfirmations(
-    userId: string,
-    agreedAt: string,
-    verification: AgeVerificationResult,
-  ) {
+  async function saveSignupConfirmations(userId: string, agreedAt: string) {
     const { error } = await supabase
       .from("profiles")
       .update({
-        gender: ADULT_CONFIRMATION,
         community_guidelines_agreed_at: agreedAt,
         community_guidelines_version: COMMUNITY_GUIDELINES_VERSION,
-        age_verified_at: verification.verifiedAt,
-        age_verification_method: verification.method,
       })
       .eq("id", userId);
 
@@ -52,7 +42,7 @@ export function AuthGate() {
     }
   }
 
-  function startSignup() {
+  async function startSignup() {
     if (!guidelinesOpened) {
       toast.error("Please open the Community Guidelines before entering.");
       return;
@@ -63,10 +53,6 @@ export function AuthGate() {
       return;
     }
 
-    setShowIdCheck(true);
-  }
-
-  async function createAccountAfterAgeCheck(verification: AgeVerificationResult) {
     setLoading(true);
     try {
       const agreedAt = new Date().toISOString();
@@ -76,10 +62,6 @@ export function AuthGate() {
         options: {
           data: {
             display_name: displayName || email.split("@")[0],
-            confirmed_18_plus: true,
-            confirmed_18_plus_at: verification.verifiedAt,
-            age_verified_at: verification.verifiedAt,
-            age_verification_method: verification.method,
             community_guidelines_agreed: true,
             community_guidelines_agreed_at: agreedAt,
             community_guidelines_version: COMMUNITY_GUIDELINES_VERSION,
@@ -89,9 +71,9 @@ export function AuthGate() {
       });
       if (error) throw error;
       if (data.user && data.session) {
-        await saveSignupConfirmations(data.user.id, agreedAt, verification);
+        await saveSignupConfirmations(data.user.id, agreedAt);
       }
-      toast.success("Welcome to the group chat");
+      toast.success("Account created. Verify your ID to enter.");
     } catch (err) {
       toast.error(getErrorMessage(err, "Something went wrong"));
     } finally {
@@ -99,11 +81,11 @@ export function AuthGate() {
     }
   }
 
-  async function handleSubmit(e: React.FormEvent) {
+  async function handleSubmit(e: FormEvent<HTMLFormElement>) {
     e.preventDefault();
 
     if (mode === "signup") {
-      startSignup();
+      await startSignup();
       return;
     }
 
@@ -116,19 +98,6 @@ export function AuthGate() {
     } finally {
       setLoading(false);
     }
-  }
-
-  if (showIdCheck && mode === "signup") {
-    return (
-      <AgeVerificationGate
-        title="Scan your ID"
-        body="Before your account is created, verify that you are 18 or older."
-        actionLabel="Create my account"
-        busy={loading}
-        onBack={() => setShowIdCheck(false)}
-        onVerified={createAccountAfterAgeCheck}
-      />
-    );
   }
 
   return (

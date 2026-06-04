@@ -254,6 +254,17 @@ async function upsertFromSubscription(subscription: StripeSubscription) {
 }
 
 export async function handleStripeEvent(event: StripeEvent) {
+  if (event.type.startsWith("identity.verification_session.")) {
+    const { handleIdentityVerificationSessionEvent } = await import("./identity.server");
+    return handleIdentityVerificationSessionEvent(
+      event.data.object as {
+        id: string;
+        status: "requires_input" | "processing" | "verified" | "canceled";
+        metadata?: Record<string, string> | null;
+      },
+    );
+  }
+
   switch (event.type) {
     case "checkout.session.completed":
     case "checkout.session.async_payment_succeeded": {

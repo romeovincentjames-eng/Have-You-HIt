@@ -17,7 +17,10 @@ import { PaymentGate, SubscribeButton } from "@/components/PaymentGate";
 import { UploadDialog } from "@/components/UploadDialog";
 import { PostCard } from "@/components/PostCard";
 import { CommunityGuidelinesDialog } from "@/components/CommunityGuidelines";
-import { ADULT_CONFIRMATION, type AgeVerificationResult } from "@/lib/age-verification";
+import {
+  createIdentityVerificationSession,
+  syncIdentityVerificationSession,
+} from "@/functions/identity.functions";
 import { useUsageLimits } from "@/hooks/use-usage-limits";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
@@ -81,8 +84,10 @@ function Index() {
   );
   const [membershipActive, setMembershipActive] = useState(false);
   const [limitNotice, setLimitNotice] = useState("");
+  const [identityBusy, setIdentityBusy] = useState(false);
 
   const usageLimits = useUsageLimits(user?.id, membershipActive);
+  const identityReturnHandled = useRef(false);
 
   const [pullY, setPullY] = useState(0);
   const [refreshing, setRefreshing] = useState(false);
@@ -168,29 +173,48 @@ function Index() {
     setMembershipActive(active);
   }, []);
 
-  const handleAgeVerified = useCallback(
-    async (verification: AgeVerificationResult) => {
-      if (!user) return;
+  const startIdentityVerification = useCallback(async () => {
+    setIdentityBusy(true);
 
-      const { error } = await supabase
-        .from("profiles")
-        .update({
-          gender: ADULT_CONFIRMATION,
-          age_verified_at: verification.verifiedAt,
-          age_verification_method: verification.method,
-        })
-        .eq("id", user.id);
+    try {
+      const { url } = await createIdentityVerificationSession({
+        data: { origin: window.location.origin },
+      });
+      window.location.assign(url);
+    } catch (err) {
+      toast.error(err instanceof Error ? err.message : "Could not start ID verification.");
+      setIdentityBusy(false);
+    }
+  }, []);
 
-      if (error) {
-        toast.error(error.message);
-        return;
+  const syncIdentityVerification = useCallback(async () => {
+    setIdentityBusy(true);
+
+    try {
+      const result = await syncIdentityVerificationSession();
+
+      if (result.verified && result.ageVerifiedAt) {
+        setGender("confirmed_18_plus");
+        setAgeVerifiedAt(result.ageVerifiedAt);
+        toast.success("ID verified. Welcome in.");
       }
+    } catch (err) {
+      toast.error(err instanceof Error ? err.message : "Could not confirm ID verification yet.");
+    } finally {
+      window.history.replaceState({}, "", window.location.pathname);
+      setIdentityBusy(false);
+    }
+  }, []);
 
-      setGender(ADULT_CONFIRMATION);
-      setAgeVerifiedAt(verification.verifiedAt);
-    },
-    [user],
-  );
+  useEffect(() => {
+    if (!user || identityReturnHandled.current) return;
+
+    const params = new URLSearchParams(window.location.search);
+    if (params.get("identity") !== "return") return;
+
+    identityReturnHandled.current = true;
+    void syncIdentityVerification();
+  }, [syncIdentityVerification, user]);
 
   const promptSubscribeForLimit = useCallback((message: string) => {
     setLimitNotice(message);
@@ -380,9 +404,10 @@ function Index() {
     return (
       <AgeVerificationGate
         title="Verify your age"
-        body="Scan your ID before entering the home page."
-        actionLabel="Enter Have You Hit"
-        onVerified={handleAgeVerified}
+        body="Stripe Identity will verify your ID and confirm your date of birth is 18+."
+        actionLabel="Start Stripe Identity"
+        busy={identityBusy}
+        onStartIdentity={startIdentityVerification}
         onSignOut={() => supabase.auth.signOut()}
       />
     );

@@ -1,6 +1,6 @@
 export const ADULT_CONFIRMATION = "confirmed_18_plus";
 
-export type AgeVerificationMethod = "id_barcode" | "id_image_and_birthdate";
+export type AgeVerificationMethod = "id_barcode" | "id_image_and_birthdate" | "stripe_identity";
 
 export type AgeVerificationResult = {
   verifiedAt: string;
