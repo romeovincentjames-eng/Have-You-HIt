@@ -4,9 +4,11 @@ import { supabase } from "@/integrations/supabase/client";
 import { useAuth } from "@/hooks/use-auth";
 import { AuthGate } from "@/components/AuthGate";
 import { GenderGate } from "@/components/GenderGate";
+import { GuidelinesGate } from "@/components/GuidelinesGate";
 import { PaymentGate } from "@/components/PaymentGate";
 import { UploadDialog } from "@/components/UploadDialog";
 import { PostCard } from "@/components/PostCard";
+import { CommunityGuidelinesDialog } from "@/components/CommunityGuidelines";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { LogOut, Search, MapPin, X } from "lucide-react";
@@ -62,6 +64,9 @@ function Index() {
   const [myLoc, setMyLoc] = useState<{ lat: number; lng: number } | null>(null);
   const [nearby, setNearby] = useState(false);
   const [gender, setGender] = useState<string | null | undefined>(undefined);
+  const [guidelinesAgreedAt, setGuidelinesAgreedAt] = useState<string | null | undefined>(
+    undefined,
+  );
   const [membershipActive, setMembershipActive] = useState(false);
 
   const [pullY, setPullY] = useState(0);
@@ -71,16 +76,20 @@ function Index() {
   useEffect(() => {
     if (!user) {
       setGender(undefined);
+      setGuidelinesAgreedAt(undefined);
       setMembershipActive(false);
       return;
     }
 
     supabase
       .from("profiles")
-      .select("gender")
+      .select("gender,community_guidelines_agreed_at")
       .eq("id", user.id)
       .maybeSingle()
-      .then(({ data }) => setGender((data?.gender as string | null) ?? null));
+      .then(({ data }) => {
+        setGender((data?.gender as string | null) ?? null);
+        setGuidelinesAgreedAt(data?.community_guidelines_agreed_at ?? null);
+      });
   }, [user]);
 
   useEffect(() => {
@@ -235,6 +244,9 @@ function Index() {
   if (gender === undefined) return <div className="min-h-screen" />;
   if (!gender)
     return <GenderGate userId={user.id} onConfirmed={() => setGender("confirmed_18_plus")} />;
+  if (guidelinesAgreedAt === undefined) return <div className="min-h-screen" />;
+  if (!guidelinesAgreedAt)
+    return <GuidelinesGate userId={user.id} onConfirmed={setGuidelinesAgreedAt} />;
 
   return (
     <PaymentGate userEmail={session?.user.email} onActive={handleMembershipActive}>
@@ -255,6 +267,8 @@ function Index() {
                 <p className="max-w-28 text-right text-[11px] font-black uppercase leading-tight text-primary sm:max-w-none sm:text-sm">
                   This is in protest of the Tea app
                 </p>
+
+                <CommunityGuidelinesDialog />
 
                 <UploadDialog userId={user.id} onUploaded={load} />
 

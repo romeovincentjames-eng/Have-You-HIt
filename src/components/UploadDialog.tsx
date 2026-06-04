@@ -11,6 +11,7 @@ import {
   DialogTitle,
   DialogTrigger,
 } from "@/components/ui/dialog";
+import { CommunityGuidelinesList } from "@/components/CommunityGuidelines";
 import { toast } from "sonner";
 import { ImagePlus, Upload, MapPin, Loader2, ShieldCheck } from "lucide-react";
 
@@ -36,6 +37,7 @@ export function UploadDialog({ userId, onUploaded }: { userId: string; onUploade
   const [caption, setCaption] = useState("");
   const [loc, setLoc] = useState<Loc | null>(null);
   const [privacyAgreed, setPrivacyAgreed] = useState(false);
+  const [guidelinesAgreed, setGuidelinesAgreed] = useState(false);
   const [locLoading, setLocLoading] = useState(false);
   const [loading, setLoading] = useState(false);
 
@@ -114,6 +116,11 @@ export function UploadDialog({ userId, onUploaded }: { userId: string; onUploade
       return;
     }
 
+    if (!guidelinesAgreed) {
+      toast.error("Please agree to follow the Community Guidelines before posting.");
+      return;
+    }
+
     setLoading(true);
 
     try {
@@ -151,6 +158,7 @@ export function UploadDialog({ userId, onUploaded }: { userId: string; onUploade
       setSubjectName("");
       setLoc(null);
       setPrivacyAgreed(false);
+      setGuidelinesAgreed(false);
       onUploaded();
     } catch (err) {
       toast.error(getErrorMessage(err, "Upload failed"));
@@ -168,7 +176,7 @@ export function UploadDialog({ userId, onUploaded }: { userId: string; onUploade
         </Button>
       </DialogTrigger>
 
-      <DialogContent className="rounded-3xl max-w-md">
+      <DialogContent className="rounded-3xl max-w-md max-h-[90vh] overflow-y-auto">
         <DialogHeader>
           <DialogTitle className="font-display text-2xl">New post</DialogTitle>
         </DialogHeader>
@@ -228,6 +236,28 @@ export function UploadDialog({ userId, onUploaded }: { userId: string; onUploade
               : "Tag my location"}
           </Button>
 
+          <div className="border-y border-border py-3">
+            <p className="mb-1 text-xs font-black uppercase text-primary">Community Guidelines</p>
+            <CommunityGuidelinesList compact />
+          </div>
+
+          <label className="flex items-start gap-3 rounded-2xl border-2 border-primary bg-primary/10 p-4 cursor-pointer">
+            <Checkbox
+              checked={guidelinesAgreed}
+              onCheckedChange={(value) => setGuidelinesAgreed(value === true)}
+              className="mt-1 size-5"
+              aria-label="Agree to follow the Community Guidelines for this post"
+            />
+            <span>
+              <span className="text-lg font-black uppercase leading-tight text-primary">
+                I agree to follow the Community Guidelines for this post
+              </span>
+              <span className="mt-2 block text-sm font-semibold text-foreground">
+                This post is factual, private, respectful, clean, and only about adults.
+              </span>
+            </span>
+          </label>
+
           <label className="flex items-start gap-3 rounded-2xl border-2 border-primary bg-primary/10 p-4 cursor-pointer">
             <Checkbox
               checked={privacyAgreed}
@@ -243,7 +273,7 @@ export function UploadDialog({ userId, onUploaded }: { userId: string; onUploade
 
           <Button
             onClick={handleUpload}
-            disabled={!file || !privacyAgreed || loading}
+            disabled={!file || !privacyAgreed || !guidelinesAgreed || loading}
             className="w-full rounded-full h-11 font-semibold"
           >
             {loading ? "Posting…" : "Post it"}

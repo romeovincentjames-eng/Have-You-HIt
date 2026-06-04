@@ -4,6 +4,8 @@ import { Button } from "@/components/ui/button";
 import { Checkbox } from "@/components/ui/checkbox";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
+import { CommunityGuidelinesList } from "@/components/CommunityGuidelines";
+import { COMMUNITY_GUIDELINES_VERSION } from "@/lib/community-guidelines";
 import { ShieldCheck } from "lucide-react";
 import { toast } from "sonner";
 
@@ -19,16 +21,21 @@ export function AuthGate() {
   const [password, setPassword] = useState("");
   const [displayName, setDisplayName] = useState("");
   const [adultConfirmed, setAdultConfirmed] = useState(false);
+  const [guidelinesAgreed, setGuidelinesAgreed] = useState(false);
   const [loading, setLoading] = useState(false);
 
-  async function saveAdultConfirmation(userId: string) {
+  async function saveSignupConfirmations(userId: string, agreedAt: string) {
     const { error } = await supabase
       .from("profiles")
-      .update({ gender: ADULT_CONFIRMATION })
+      .update({
+        gender: ADULT_CONFIRMATION,
+        community_guidelines_agreed_at: agreedAt,
+        community_guidelines_version: COMMUNITY_GUIDELINES_VERSION,
+      })
       .eq("id", userId);
 
     if (error) {
-      toast.error("Signed in, but the 18+ confirmation could not be saved yet.");
+      toast.error("Signed in, but your confirmations could not be saved yet.");
     }
   }
 
@@ -40,9 +47,15 @@ export function AuthGate() {
       return;
     }
 
+    if (mode === "signup" && !guidelinesAgreed) {
+      toast.error("Please agree to the Community Guidelines before entering.");
+      return;
+    }
+
     setLoading(true);
     try {
       if (mode === "signup") {
+        const agreedAt = new Date().toISOString();
         const { data, error } = await supabase.auth.signUp({
           email,
           password,
@@ -50,16 +63,19 @@ export function AuthGate() {
             data: {
               display_name: displayName || email.split("@")[0],
               confirmed_18_plus: true,
-              confirmed_18_plus_at: new Date().toISOString(),
+              confirmed_18_plus_at: agreedAt,
+              community_guidelines_agreed: true,
+              community_guidelines_agreed_at: agreedAt,
+              community_guidelines_version: COMMUNITY_GUIDELINES_VERSION,
             },
             emailRedirectTo: `${window.location.origin}/`,
           },
         });
         if (error) throw error;
         if (data.user && data.session) {
-          await saveAdultConfirmation(data.user.id);
+          await saveSignupConfirmations(data.user.id, agreedAt);
         }
-        toast.success("Welcome to the group chat 💅");
+        toast.success("Welcome to the group chat");
       } else {
         const { error } = await supabase.auth.signInWithPassword({ email, password });
         if (error) throw error;
@@ -135,6 +151,35 @@ export function AuthGate() {
             </div>
 
             {mode === "signup" && (
+              <div className="border-y border-border py-3">
+                <p className="mb-1 text-xs font-black uppercase text-primary">
+                  Community Guidelines
+                </p>
+                <CommunityGuidelinesList compact />
+              </div>
+            )}
+
+            {mode === "signup" && (
+              <label className="flex items-start gap-3 rounded-2xl border-2 border-primary bg-primary/10 p-4 cursor-pointer">
+                <Checkbox
+                  checked={guidelinesAgreed}
+                  onCheckedChange={(value) => setGuidelinesAgreed(value === true)}
+                  className="mt-1 size-5"
+                  aria-label="Agree to follow the Community Guidelines"
+                />
+
+                <span>
+                  <span className="text-xl font-black uppercase leading-tight text-primary">
+                    I agree to follow the Community Guidelines
+                  </span>
+                  <span className="mt-2 block text-sm font-semibold text-foreground">
+                    I will keep posts factual, private, respectful, clean, and 18+.
+                  </span>
+                </span>
+              </label>
+            )}
+
+            {mode === "signup" && (
               <label className="flex items-start gap-3 rounded-2xl border-2 border-primary bg-primary/10 p-4 cursor-pointer">
                 <Checkbox
                   checked={adultConfirmed}
@@ -159,7 +204,7 @@ export function AuthGate() {
 
             <Button
               type="submit"
-              disabled={loading || (mode === "signup" && !adultConfirmed)}
+              disabled={loading || (mode === "signup" && (!adultConfirmed || !guidelinesAgreed))}
               className="w-full rounded-full h-11 text-base font-semibold"
             >
               {loading ? "..." : mode === "signup" ? "Start hitting" : "Let me in"}

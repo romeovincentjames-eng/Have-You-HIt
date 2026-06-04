@@ -147,6 +147,8 @@ export type Database = {
       profiles: {
         Row: {
           avatar_url: string | null;
+          community_guidelines_agreed_at: string | null;
+          community_guidelines_version: string | null;
           created_at: string;
           display_name: string;
           gender: string | null;
@@ -154,6 +156,8 @@ export type Database = {
         };
         Insert: {
           avatar_url?: string | null;
+          community_guidelines_agreed_at?: string | null;
+          community_guidelines_version?: string | null;
           created_at?: string;
           display_name: string;
           gender?: string | null;
@@ -161,6 +165,8 @@ export type Database = {
         };
         Update: {
           avatar_url?: string | null;
+          community_guidelines_agreed_at?: string | null;
+          community_guidelines_version?: string | null;
           created_at?: string;
           display_name?: string;
           gender?: string | null;
