@@ -1,15 +1,24 @@
 import { createFileRoute } from "@tanstack/react-router";
-import { useEffect, useMemo, useState, useCallback, useRef, type TouchEvent } from "react";
+import {
+  useEffect,
+  useMemo,
+  useState,
+  useCallback,
+  useRef,
+  type FormEvent,
+  type TouchEvent,
+} from "react";
 import { supabase } from "@/integrations/supabase/client";
 import { useAuth } from "@/hooks/use-auth";
 import { AgeVerificationGate } from "@/components/AgeVerificationGate";
 import { AuthGate } from "@/components/AuthGate";
 import { GuidelinesGate } from "@/components/GuidelinesGate";
-import { PaymentGate } from "@/components/PaymentGate";
+import { PaymentGate, SubscribeButton } from "@/components/PaymentGate";
 import { UploadDialog } from "@/components/UploadDialog";
 import { PostCard } from "@/components/PostCard";
 import { CommunityGuidelinesDialog } from "@/components/CommunityGuidelines";
 import { ADULT_CONFIRMATION, type AgeVerificationResult } from "@/lib/age-verification";
+import { useUsageLimits } from "@/hooks/use-usage-limits";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { LogOut, Search, MapPin, X } from "lucide-react";
@@ -61,6 +70,7 @@ function Index() {
   const [posts, setPosts] = useState<Post[]>([]);
   const [names, setNames] = useState<Record<string, string>>({});
   const [feedLoading, setFeedLoading] = useState(true);
+  const [searchDraft, setSearchDraft] = useState("");
   const [query, setQuery] = useState("");
   const [myLoc, setMyLoc] = useState<{ lat: number; lng: number } | null>(null);
   const [nearby, setNearby] = useState(false);
@@ -70,6 +80,9 @@ function Index() {
     undefined,
   );
   const [membershipActive, setMembershipActive] = useState(false);
+  const [limitNotice, setLimitNotice] = useState("");
+
+  const usageLimits = useUsageLimits(user?.id, membershipActive);
 
   const [pullY, setPullY] = useState(0);
   const [refreshing, setRefreshing] = useState(false);
@@ -148,11 +161,11 @@ function Index() {
   }, []);
 
   useEffect(() => {
-    if (user && membershipActive) load();
-  }, [user, membershipActive, load]);
+    if (user && ageVerifiedAt && guidelinesAgreedAt) load();
+  }, [user, ageVerifiedAt, guidelinesAgreedAt, load]);
 
-  const handleMembershipActive = useCallback(() => {
-    setMembershipActive(true);
+  const handleMembershipStatus = useCallback((active: boolean) => {
+    setMembershipActive(active);
   }, []);
 
   const handleAgeVerified = useCallback(
@@ -178,6 +191,79 @@ function Index() {
     },
     [user],
   );
+
+  const promptSubscribeForLimit = useCallback((message: string) => {
+    setLimitNotice(message);
+    toast.error(message);
+  }, []);
+
+  const handleSearchSubmit = useCallback(
+    async (e: FormEvent<HTMLFormElement>) => {
+      e.preventDefault();
+
+      const nextQuery = searchDraft.trim();
+
+      if (!nextQuery) {
+        setQuery("");
+        setLimitNotice("");
+        return;
+      }
+
+      if (nextQuery.toLowerCase() === query.trim().toLowerCase()) {
+        return;
+      }
+
+      if (!membershipActive && !usageLimits.hasRemaining("search")) {
+        promptSubscribeForLimit(
+          "You used all 7 free searches this week. Subscribe for unlimited search.",
+        );
+        return;
+      }
+
+      try {
+        const result = await usageLimits.recordUse("search");
+
+        if (!result.allowed) {
+          promptSubscribeForLimit(
+            "You used all 7 free searches this week. Subscribe for unlimited search.",
+          );
+          return;
+        }
+
+        setQuery(nextQuery);
+        setLimitNotice("");
+      } catch (err) {
+        toast.error(err instanceof Error ? err.message : "Could not count this search.");
+      }
+    },
+    [membershipActive, promptSubscribeForLimit, query, searchDraft, usageLimits],
+  );
+
+  const recordLocationUse = useCallback(async () => {
+    if (!membershipActive && !usageLimits.hasRemaining("location")) {
+      promptSubscribeForLimit(
+        "You used both free location uses this week. Subscribe for unlimited location.",
+      );
+      return false;
+    }
+
+    try {
+      const result = await usageLimits.recordUse("location");
+
+      if (!result.allowed) {
+        promptSubscribeForLimit(
+          "You used both free location uses this week. Subscribe for unlimited location.",
+        );
+        return false;
+      }
+
+      setLimitNotice("");
+      return true;
+    } catch (err) {
+      toast.error(err instanceof Error ? err.message : "Could not count location use.");
+      return false;
+    }
+  }, [membershipActive, promptSubscribeForLimit, usageLimits]);
 
   function handleTouchStart(e: TouchEvent<HTMLDivElement>) {
     if (window.scrollY === 0) {
@@ -221,7 +307,23 @@ function Index() {
     }
 
     if (myLoc) {
-      setNearby(true);
+      if (!membershipActive && !usageLimits.hasRemaining("location")) {
+        promptSubscribeForLimit(
+          "You used both free location uses this week. Subscribe for unlimited location.",
+        );
+        return;
+      }
+
+      recordLocationUse().then((allowed) => {
+        if (allowed) setNearby(true);
+      });
+      return;
+    }
+
+    if (!membershipActive && !usageLimits.hasRemaining("location")) {
+      promptSubscribeForLimit(
+        "You used both free location uses this week. Subscribe for unlimited location.",
+      );
       return;
     }
 
@@ -231,7 +333,10 @@ function Index() {
     }
 
     navigator.geolocation.getCurrentPosition(
-      (pos) => {
+      async (pos) => {
+        const allowed = await recordLocationUse();
+        if (!allowed) return;
+
         setMyLoc({ lat: pos.coords.latitude, lng: pos.coords.longitude });
         setNearby(true);
       },
@@ -286,116 +391,176 @@ function Index() {
     return <GuidelinesGate userId={user.id} onConfirmed={setGuidelinesAgreedAt} />;
 
   return (
-    <PaymentGate userEmail={session?.user.email} onActive={handleMembershipActive}>
-      <div
-        className="min-h-screen"
-        onTouchStart={handleTouchStart}
-        onTouchMove={handleTouchMove}
-        onTouchEnd={handleTouchEnd}
-      >
-        <header className="sticky top-0 z-30 backdrop-blur-xl bg-background/70 border-b border-border">
-          <div className="max-w-2xl mx-auto px-4 py-3 space-y-3">
-            <div className="flex items-center justify-between gap-3">
-              <h1 className="font-display text-2xl sm:text-3xl font-black text-primary leading-none">
-                Have You Hit
-              </h1>
+    <PaymentGate userEmail={session?.user.email} onStatus={handleMembershipStatus}>
+      {({ active, checkingOut, priceLabel, startCheckout }) => (
+        <div
+          className="min-h-screen"
+          onTouchStart={handleTouchStart}
+          onTouchMove={handleTouchMove}
+          onTouchEnd={handleTouchEnd}
+        >
+          <header className="sticky top-0 z-30 backdrop-blur-xl bg-background/70 border-b border-border">
+            <div className="max-w-2xl mx-auto px-4 py-3 space-y-3">
+              <div className="flex items-center justify-between gap-3">
+                <h1 className="font-display text-2xl sm:text-3xl font-black text-primary leading-none">
+                  Have You Hit
+                </h1>
 
-              <div className="flex items-center justify-end gap-2">
-                <p className="max-w-28 text-right text-[11px] font-black uppercase leading-tight text-primary sm:max-w-none sm:text-sm">
-                  This is in protest of the Tea app
-                </p>
+                <div className="flex items-center justify-end gap-2">
+                  <p className="max-w-28 text-right text-[11px] font-black uppercase leading-tight text-primary sm:max-w-none sm:text-sm">
+                    This is in protest of the Tea app
+                  </p>
 
-                <CommunityGuidelinesDialog />
+                  <CommunityGuidelinesDialog />
 
-                <UploadDialog userId={user.id} onUploaded={load} />
+                  {!active && (
+                    <SubscribeButton
+                      checkingOut={checkingOut}
+                      onClick={startCheckout}
+                      label={priceLabel}
+                    />
+                  )}
+
+                  <UploadDialog
+                    userId={user.id}
+                    onUploaded={load}
+                    onLocationUse={recordLocationUse}
+                    locationRemaining={usageLimits.remaining.location}
+                    isSubscriber={active}
+                  />
+
+                  <Button
+                    variant="ghost"
+                    size="icon"
+                    onClick={() => supabase.auth.signOut()}
+                    className="rounded-full text-muted-foreground"
+                    aria-label="Sign out"
+                  >
+                    <LogOut className="size-4" />
+                  </Button>
+                </div>
+              </div>
+
+              <form onSubmit={handleSearchSubmit} className="flex items-center gap-2">
+                <div className="relative flex-1">
+                  <Search className="size-4 absolute left-3 top-1/2 -translate-y-1/2 text-muted-foreground" />
+
+                  <Input
+                    value={searchDraft}
+                    onChange={(e) => setSearchDraft(e.target.value)}
+                    placeholder="Search by name..."
+                    className="rounded-full pl-9 pr-9 bg-muted border-0 h-10"
+                  />
+
+                  {(searchDraft || query) && (
+                    <button
+                      type="button"
+                      onClick={() => {
+                        setSearchDraft("");
+                        setQuery("");
+                        setLimitNotice("");
+                      }}
+                      className="absolute right-2 top-1/2 -translate-y-1/2 p-1 rounded-full text-muted-foreground hover:text-foreground"
+                      aria-label="Clear search"
+                    >
+                      <X className="size-4" />
+                    </button>
+                  )}
+                </div>
 
                 <Button
-                  variant="ghost"
-                  size="icon"
-                  onClick={() => supabase.auth.signOut()}
-                  className="rounded-full text-muted-foreground"
-                  aria-label="Sign out"
+                  type="submit"
+                  variant="default"
+                  disabled={!active && usageLimits.loading}
+                  className="rounded-full h-10 gap-1.5 shrink-0 px-3"
+                  aria-label="Run search"
                 >
-                  <LogOut className="size-4" />
+                  <Search className="size-4" />
                 </Button>
-              </div>
+
+                <Button
+                  type="button"
+                  variant={nearby ? "default" : "outline"}
+                  onClick={toggleNearby}
+                  disabled={!active && usageLimits.loading}
+                  className="rounded-full h-10 gap-1.5 shrink-0"
+                  aria-pressed={nearby}
+                >
+                  <MapPin className="size-4" />
+                  Nearby
+                </Button>
+              </form>
+
+              {!active && (
+                <div className="flex flex-wrap items-center gap-2 text-xs font-semibold text-muted-foreground">
+                  <span className="rounded-full bg-muted px-3 py-1">
+                    {usageLimits.remaining.search} searches left this week
+                  </span>
+                  <span className="rounded-full bg-muted px-3 py-1">
+                    {usageLimits.remaining.location} location uses left this week
+                  </span>
+                </div>
+              )}
+
+              {active && (
+                <div className="text-xs font-black uppercase text-primary">
+                  Subscriber: unlimited search and location
+                </div>
+              )}
+
+              {limitNotice && !active && (
+                <div className="flex items-center justify-between gap-3 rounded-2xl border border-primary/30 bg-primary/10 px-4 py-3">
+                  <p className="text-sm font-semibold text-foreground">{limitNotice}</p>
+                  <SubscribeButton
+                    checkingOut={checkingOut}
+                    onClick={startCheckout}
+                    label="Upgrade"
+                  />
+                </div>
+              )}
             </div>
+          </header>
 
-            <div className="flex items-center gap-2">
-              <div className="relative flex-1">
-                <Search className="size-4 absolute left-3 top-1/2 -translate-y-1/2 text-muted-foreground" />
-
-                <Input
-                  value={query}
-                  onChange={(e) => setQuery(e.target.value)}
-                  placeholder="Search by name…"
-                  className="rounded-full pl-9 pr-9 bg-muted border-0 h-10"
-                />
-
-                {query && (
-                  <button
-                    onClick={() => setQuery("")}
-                    className="absolute right-2 top-1/2 -translate-y-1/2 p-1 rounded-full text-muted-foreground hover:text-foreground"
-                    aria-label="Clear search"
-                  >
-                    <X className="size-4" />
-                  </button>
-                )}
-              </div>
-
-              <Button
-                type="button"
-                variant={nearby ? "default" : "outline"}
-                onClick={toggleNearby}
-                className="rounded-full h-10 gap-1.5 shrink-0"
-                aria-pressed={nearby}
-              >
-                <MapPin className="size-4" />
-                Nearby
-              </Button>
+          <div
+            className="text-center text-sm font-semibold text-muted-foreground transition-all duration-200 overflow-hidden"
+            style={{ height: pullY > 0 || refreshing ? 40 : 0 }}
+          >
+            <div className="py-2">
+              {refreshing ? "Refreshing…" : pullY > 70 ? "Release to refresh" : "Pull to refresh"}
             </div>
           </div>
-        </header>
 
-        <div
-          className="text-center text-sm font-semibold text-muted-foreground transition-all duration-200 overflow-hidden"
-          style={{ height: pullY > 0 || refreshing ? 40 : 0 }}
-        >
-          <div className="py-2">
-            {refreshing ? "Refreshing…" : pullY > 70 ? "Release to refresh" : "Pull to refresh"}
-          </div>
+          <main className="max-w-2xl mx-auto px-4 py-6 space-y-6">
+            {feedLoading && posts.length === 0 && (
+              <div className="text-center py-20 text-muted-foreground">Loading the tea…</div>
+            )}
+
+            {!feedLoading && filtered.length === 0 && (
+              <div className="text-center py-20 bg-card rounded-3xl border border-border">
+                <p className="font-display text-3xl font-bold mb-2">
+                  {posts.length === 0 ? "No tea yet" : "Nothing matches"}
+                </p>
+
+                <p className="text-muted-foreground">
+                  {posts.length === 0
+                    ? "Be the first to drop a pic."
+                    : "Try a different name or turn off Nearby."}
+                </p>
+              </div>
+            )}
+
+            {filtered.map((p) => (
+              <PostCard
+                key={p.id}
+                post={p}
+                currentUserId={user.id}
+                authorName={names[p.user_id] ?? "someone"}
+                onDeleted={load}
+              />
+            ))}
+          </main>
         </div>
-
-        <main className="max-w-2xl mx-auto px-4 py-6 space-y-6">
-          {feedLoading && posts.length === 0 && (
-            <div className="text-center py-20 text-muted-foreground">Loading the tea…</div>
-          )}
-
-          {!feedLoading && filtered.length === 0 && (
-            <div className="text-center py-20 bg-card rounded-3xl border border-border">
-              <p className="font-display text-3xl font-bold mb-2">
-                {posts.length === 0 ? "No tea yet" : "Nothing matches"}
-              </p>
-
-              <p className="text-muted-foreground">
-                {posts.length === 0
-                  ? "Be the first to drop a pic."
-                  : "Try a different name or turn off Nearby."}
-              </p>
-            </div>
-          )}
-
-          {filtered.map((p) => (
-            <PostCard
-              key={p.id}
-              post={p}
-              currentUserId={user.id}
-              authorName={names[p.user_id] ?? "someone"}
-              onDeleted={load}
-            />
-          ))}
-        </main>
-      </div>
+      )}
     </PaymentGate>
   );
 }

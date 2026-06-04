@@ -1,5 +1,5 @@
 import { useCallback, useEffect, useMemo, useState, type ReactNode } from "react";
-import { CreditCard, Lock, LogOut, RefreshCw, ShieldCheck } from "lucide-react";
+import { CreditCard, RefreshCw } from "lucide-react";
 import { toast } from "sonner";
 
 import {
@@ -8,12 +8,17 @@ import {
   syncCheckoutSession,
 } from "@/functions/billing.functions";
 import { isMembershipActive, type MembershipSummary } from "@/lib/membership";
-import { supabase } from "@/integrations/supabase/client";
-import { Button } from "@/components/ui/button";
+
+export type PaymentGateState = {
+  active: boolean;
+  checkingOut: boolean;
+  priceLabel: string;
+  startCheckout: () => Promise<void>;
+};
 
 type PaymentGateProps = {
-  children: ReactNode;
-  onActive: () => void;
+  children: ReactNode | ((state: PaymentGateState) => ReactNode);
+  onStatus?: (active: boolean) => void;
   userEmail?: string | null;
 };
 
@@ -23,7 +28,7 @@ function getErrorMessage(error: unknown, fallback: string) {
   return error instanceof Error ? error.message : fallback;
 }
 
-export function PaymentGate({ children, onActive, userEmail }: PaymentGateProps) {
+export function PaymentGate({ children, onStatus }: PaymentGateProps) {
   const [membership, setMembership] = useState<MembershipSummary | null>(null);
   const [loading, setLoading] = useState(true);
   const [checkingOut, setCheckingOut] = useState(false);
@@ -48,8 +53,10 @@ export function PaymentGate({ children, onActive, userEmail }: PaymentGateProps)
   }, [loadMembership]);
 
   useEffect(() => {
-    if (active) onActive();
-  }, [active, onActive]);
+    if (!loading) {
+      onStatus?.(active);
+    }
+  }, [active, loading, onStatus]);
 
   useEffect(() => {
     const params = new URLSearchParams(window.location.search);
@@ -106,68 +113,40 @@ export function PaymentGate({ children, onActive, userEmail }: PaymentGateProps)
     );
   }
 
-  if (active) return <>{children}</>;
+  const state: PaymentGateState = {
+    active,
+    checkingOut,
+    priceLabel,
+    startCheckout,
+  };
 
+  return <>{typeof children === "function" ? children(state) : children}</>;
+}
+
+export function SubscribeButton({
+  checkingOut,
+  onClick,
+  label = "Subscribe",
+  className = "",
+}: {
+  checkingOut: boolean;
+  onClick: () => void;
+  label?: string;
+  className?: string;
+}) {
   return (
-    <div className="min-h-screen flex items-center justify-center px-4 py-10">
-      <div className="w-full max-w-md rounded-3xl bg-card border border-border p-7 shadow-xl shadow-primary/10">
-        <div className="size-14 rounded-2xl bg-primary/10 text-primary flex items-center justify-center mb-5">
-          <Lock className="size-7" />
-        </div>
-
-        <h1 className="font-display text-4xl font-black leading-tight mb-3">Paid members only</h1>
-        <p className="text-muted-foreground mb-6">
-          Unlock Have You Hit to post pics, vote, flag, and join the comments.
-        </p>
-
-        <div className="rounded-2xl bg-muted/60 p-4 mb-5">
-          <div className="flex items-center justify-between gap-4">
-            <div>
-              <p className="text-sm font-semibold">Have You Hit access</p>
-              <p className="text-xs text-muted-foreground">Secure checkout powered by Stripe</p>
-            </div>
-            <p className="font-display text-3xl font-black text-primary">{priceLabel}</p>
-          </div>
-        </div>
-
-        <div className="space-y-2 mb-6 text-sm">
-          <div className="flex items-center gap-2">
-            <ShieldCheck className="size-4 text-green-flag" />
-            <span>Feed, uploads, votes, flags, and comments</span>
-          </div>
-          <div className="flex items-center gap-2">
-            <ShieldCheck className="size-4 text-green-flag" />
-            <span>Payment confirmation stays on the server</span>
-          </div>
-        </div>
-
-        <Button
-          type="button"
-          onClick={startCheckout}
-          disabled={checkingOut}
-          className="w-full rounded-full h-12 gap-2 font-semibold"
-        >
-          {checkingOut ? (
-            <RefreshCw className="size-4 animate-spin" />
-          ) : (
-            <CreditCard className="size-4" />
-          )}
-          {checkingOut ? "Opening checkout..." : "Unlock access"}
-        </Button>
-
-        {userEmail && (
-          <p className="text-center text-xs text-muted-foreground mt-4">Signed in as {userEmail}</p>
-        )}
-
-        <button
-          type="button"
-          onClick={() => supabase.auth.signOut()}
-          className="w-full mt-4 text-xs text-muted-foreground hover:text-foreground inline-flex items-center justify-center gap-1.5"
-        >
-          <LogOut className="size-3" />
-          Sign out
-        </button>
-      </div>
-    </div>
+    <button
+      type="button"
+      onClick={onClick}
+      disabled={checkingOut}
+      className={`inline-flex items-center justify-center gap-1.5 rounded-full bg-primary px-3 py-2 text-xs font-black uppercase leading-none text-primary-foreground shadow-sm shadow-primary/20 transition hover:opacity-90 disabled:opacity-60 ${className}`}
+    >
+      {checkingOut ? (
+        <RefreshCw className="size-3 animate-spin" />
+      ) : (
+        <CreditCard className="size-3" />
+      )}
+      {checkingOut ? "Opening..." : label}
+    </button>
   );
 }

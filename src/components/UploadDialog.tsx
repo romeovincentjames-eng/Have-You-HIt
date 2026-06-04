@@ -29,7 +29,19 @@ const safeRandomId = () => {
   return "id-" + Date.now() + "-" + Math.random().toString(36).slice(2);
 };
 
-export function UploadDialog({ userId, onUploaded }: { userId: string; onUploaded: () => void }) {
+export function UploadDialog({
+  userId,
+  onUploaded,
+  onLocationUse,
+  locationRemaining,
+  isSubscriber,
+}: {
+  userId: string;
+  onUploaded: () => void;
+  onLocationUse: () => Promise<boolean>;
+  locationRemaining: number;
+  isSubscriber: boolean;
+}) {
   const [open, setOpen] = useState(false);
   const [file, setFile] = useState<File | null>(null);
   const [preview, setPreview] = useState<string | null>(null);
@@ -47,6 +59,11 @@ export function UploadDialog({ userId, onUploaded }: { userId: string; onUploade
   }
 
   async function tagLocation() {
+    if (!isSubscriber && locationRemaining <= 0) {
+      toast.error("Free location uses are used up this week. Subscribe for unlimited location.");
+      return;
+    }
+
     if (!navigator.geolocation) {
       toast.error("Geolocation not supported");
       return;
@@ -56,6 +73,13 @@ export function UploadDialog({ userId, onUploaded }: { userId: string; onUploade
 
     navigator.geolocation.getCurrentPosition(
       async (pos) => {
+        const allowed = await onLocationUse();
+
+        if (!allowed) {
+          setLocLoading(false);
+          return;
+        }
+
         const { latitude: lat, longitude: lng } = pos.coords;
         let label: string | null = null;
 

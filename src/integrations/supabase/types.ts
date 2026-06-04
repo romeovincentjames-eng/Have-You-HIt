@@ -180,6 +180,33 @@ export type Database = {
         };
         Relationships: [];
       };
+      usage_counters: {
+        Row: {
+          created_at: string;
+          feature: string;
+          updated_at: string;
+          used_count: number;
+          user_id: string;
+          week_start: string;
+        };
+        Insert: {
+          created_at?: string;
+          feature: string;
+          updated_at?: string;
+          used_count?: number;
+          user_id: string;
+          week_start: string;
+        };
+        Update: {
+          created_at?: string;
+          feature?: string;
+          updated_at?: string;
+          used_count?: number;
+          user_id?: string;
+          week_start?: string;
+        };
+        Relationships: [];
+      };
       votes: {
         Row: {
           created_at: string;
