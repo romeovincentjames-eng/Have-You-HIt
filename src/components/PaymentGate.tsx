@@ -139,7 +139,8 @@ export function SubscribeButton({
       type="button"
       onClick={onClick}
       disabled={checkingOut}
-      className={`inline-flex items-center justify-center gap-1.5 rounded-full bg-primary px-3 py-2 text-xs font-black uppercase leading-none text-primary-foreground shadow-sm shadow-primary/20 transition hover:opacity-90 disabled:opacity-60 ${className}`}
+      aria-busy={checkingOut}
+      className={`inline-flex items-center justify-center gap-1 rounded-full bg-primary px-4 py-2 text-[11px] font-black uppercase leading-none text-primary-foreground shadow-lg shadow-primary/30 transition duration-200 hover:bg-primary/90 hover:shadow-primary/40 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary/50 disabled:opacity-60 ${className}`}
     >
       {checkingOut ? (
         <RefreshCw className="size-3 animate-spin" />

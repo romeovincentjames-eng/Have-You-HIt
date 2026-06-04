@@ -429,6 +429,7 @@ function Index() {
       {({ active, checkingOut, priceLabel, startCheckout }) => (
         <div
           className="min-h-screen"
+          style={{ touchAction: "pan-y" }}
           onTouchStart={handleTouchStart}
           onTouchMove={handleTouchMove}
           onTouchEnd={handleTouchEnd}

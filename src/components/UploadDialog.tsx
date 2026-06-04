@@ -293,7 +293,7 @@ export function UploadDialog({
                   <img
                     src={preview}
                     alt="Selected photo preview"
-                    className="h-full w-full object-cover"
+                    className="h-full w-full object-contain"
                     onError={() => setPreviewError("Preview could not load. Choose another photo.")}
                   />
                 ) : file ? (
