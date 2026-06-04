@@ -1,4 +1,4 @@
-import { useState } from "react";
+import { useRef, useState } from "react";
 import { supabase } from "@/integrations/supabase/client";
 import { Button } from "@/components/ui/button";
 import { Checkbox } from "@/components/ui/checkbox";
@@ -13,9 +13,11 @@ import {
 } from "@/components/ui/dialog";
 import { CommunityGuidelinesList } from "@/components/CommunityGuidelines";
 import { toast } from "sonner";
-import { ImagePlus, Upload, MapPin, Loader2, ShieldCheck } from "lucide-react";
+import { ChevronDown, ImagePlus, Upload, MapPin, Loader2, ShieldCheck } from "lucide-react";
 
 type Loc = { lat: number; lng: number; label: string | null };
+
+const IMAGE_FILE_NAME = /\.(avif|gif|heic|heif|jpe?g|png|webp)$/i;
 
 function getErrorMessage(error: unknown, fallback: string) {
   return error instanceof Error ? error.message : fallback;
@@ -28,6 +30,10 @@ const safeRandomId = () => {
 
   return "id-" + Date.now() + "-" + Math.random().toString(36).slice(2);
 };
+
+function isImageFile(file: File) {
+  return file.type.startsWith("image/") || IMAGE_FILE_NAME.test(file.name);
+}
 
 export function UploadDialog({
   userId,
@@ -45,17 +51,78 @@ export function UploadDialog({
   const [open, setOpen] = useState(false);
   const [file, setFile] = useState<File | null>(null);
   const [preview, setPreview] = useState<string | null>(null);
+  const [previewError, setPreviewError] = useState("");
   const [subjectName, setSubjectName] = useState("");
   const [caption, setCaption] = useState("");
   const [loc, setLoc] = useState<Loc | null>(null);
   const [privacyAgreed, setPrivacyAgreed] = useState(false);
+  const [guidelinesOpened, setGuidelinesOpened] = useState(false);
+  const [guidelinesExpanded, setGuidelinesExpanded] = useState(false);
   const [guidelinesAgreed, setGuidelinesAgreed] = useState(false);
   const [locLoading, setLocLoading] = useState(false);
   const [loading, setLoading] = useState(false);
+  const fileInputRef = useRef<HTMLInputElement | null>(null);
+  const previewReadId = useRef(0);
 
   function pick(f: File | null) {
+    previewReadId.current += 1;
+
+    if (!f) {
+      setFile(null);
+      setPreview(null);
+      setPreviewError("");
+      return;
+    }
+
+    if (!isImageFile(f)) {
+      toast.error("Choose an image file.");
+      if (fileInputRef.current) fileInputRef.current.value = "";
+      return;
+    }
+
+    if (f.size > 8 * 1024 * 1024) {
+      toast.error("Keep it under 8MB.");
+      if (fileInputRef.current) fileInputRef.current.value = "";
+      return;
+    }
+
     setFile(f);
-    setPreview(f ? URL.createObjectURL(f) : null);
+    setPreview(null);
+    setPreviewError("");
+
+    const readId = previewReadId.current;
+    const reader = new FileReader();
+
+    reader.onload = () => {
+      if (readId !== previewReadId.current) return;
+
+      if (typeof reader.result === "string") {
+        setPreview(reader.result);
+        return;
+      }
+
+      setPreviewError("Preview could not load. Choose another photo.");
+    };
+
+    reader.onerror = () => {
+      if (readId !== previewReadId.current) return;
+      setPreviewError("Preview could not load. Choose another photo.");
+    };
+
+    reader.readAsDataURL(f);
+  }
+
+  function removePhoto() {
+    pick(null);
+
+    if (fileInputRef.current) {
+      fileInputRef.current.value = "";
+    }
+  }
+
+  function toggleGuidelines() {
+    setGuidelinesOpened(true);
+    setGuidelinesExpanded((current) => !current);
   }
 
   async function tagLocation() {
@@ -140,6 +207,11 @@ export function UploadDialog({
       return;
     }
 
+    if (!guidelinesOpened) {
+      toast.error("Please open the Community Guidelines before posting.");
+      return;
+    }
+
     if (!guidelinesAgreed) {
       toast.error("Please agree to follow the Community Guidelines before posting.");
       return;
@@ -152,7 +224,7 @@ export function UploadDialog({
       const path = `${userId}/${safeRandomId()}.${ext}`;
 
       const { error: upErr } = await supabase.storage.from("photos").upload(path, file, {
-        contentType: file.type,
+        ...(file.type ? { contentType: file.type } : {}),
         upsert: false,
       });
 
@@ -178,11 +250,19 @@ export function UploadDialog({
       setOpen(false);
       setFile(null);
       setPreview(null);
+      setPreviewError("");
       setCaption("");
       setSubjectName("");
       setLoc(null);
       setPrivacyAgreed(false);
+      setGuidelinesOpened(false);
+      setGuidelinesExpanded(false);
       setGuidelinesAgreed(false);
+
+      if (fileInputRef.current) {
+        fileInputRef.current.value = "";
+      }
+
       onUploaded();
     } catch (err) {
       toast.error(getErrorMessage(err, "Upload failed"));
@@ -206,25 +286,57 @@ export function UploadDialog({
         </DialogHeader>
 
         <div className="space-y-4">
-          <label className="block">
-            <div className="aspect-[4/5] rounded-2xl border-2 border-dashed border-border bg-muted/50 overflow-hidden flex items-center justify-center cursor-pointer hover:border-primary transition">
-              {preview ? (
-                <img src={preview} alt="preview" className="w-full h-full object-cover" />
-              ) : (
-                <div className="text-center text-muted-foreground">
-                  <Upload className="size-8 mx-auto mb-2" />
-                  <p className="text-sm font-medium">Tap to choose a pic</p>
-                </div>
-              )}
-            </div>
+          <div className="space-y-2">
+            <label className="block">
+              <div className="aspect-[4/5] rounded-2xl border-2 border-dashed border-border bg-muted/50 overflow-hidden flex items-center justify-center cursor-pointer hover:border-primary transition">
+                {preview && !previewError ? (
+                  <img
+                    src={preview}
+                    alt="Selected photo preview"
+                    className="h-full w-full object-cover"
+                    onError={() => setPreviewError("Preview could not load. Choose another photo.")}
+                  />
+                ) : file ? (
+                  <div className="px-5 text-center text-muted-foreground">
+                    <ImagePlus className="mx-auto mb-2 size-8" />
+                    <p className="text-sm font-semibold">
+                      {previewError || "Loading photo preview..."}
+                    </p>
+                    <p className="mt-1 break-all text-xs">{file.name}</p>
+                  </div>
+                ) : (
+                  <div className="text-center text-muted-foreground">
+                    <Upload className="mx-auto mb-2 size-8" />
+                    <p className="text-sm font-medium">Tap to choose a pic</p>
+                  </div>
+                )}
+              </div>
 
-            <input
-              type="file"
-              accept="image/*"
-              className="hidden"
-              onChange={(e) => pick(e.target.files?.[0] ?? null)}
-            />
-          </label>
+              <input
+                ref={fileInputRef}
+                type="file"
+                accept="image/*"
+                className="hidden"
+                onChange={(e) => pick(e.target.files?.[0] ?? null)}
+              />
+            </label>
+
+            {file && (
+              <div className="flex items-center justify-between gap-3 rounded-2xl bg-muted/60 px-3 py-2 text-sm">
+                <span className="min-w-0 truncate font-semibold text-muted-foreground">
+                  {file.name}
+                </span>
+                <Button
+                  type="button"
+                  variant="outline"
+                  onClick={removePhoto}
+                  className="h-8 shrink-0 rounded-full px-3 text-xs font-semibold"
+                >
+                  Remove
+                </Button>
+              </div>
+            )}
+          </div>
 
           <Input
             placeholder="Their name *"
@@ -261,13 +373,43 @@ export function UploadDialog({
           </Button>
 
           <div className="border-y border-border py-3">
-            <p className="mb-1 text-xs font-black uppercase text-primary">Community Guidelines</p>
-            <CommunityGuidelinesList compact />
+            <button
+              type="button"
+              onClick={toggleGuidelines}
+              aria-expanded={guidelinesExpanded}
+              className="flex w-full items-center justify-between gap-3 rounded-2xl px-1 py-2 text-left text-primary"
+            >
+              <span className="flex items-center gap-3">
+                <span className="flex size-9 shrink-0 items-center justify-center rounded-xl bg-primary/10">
+                  <ShieldCheck className="size-4" />
+                </span>
+                <span>
+                  <span className="block text-xs font-black uppercase">Community Guidelines</span>
+                  <span className="mt-1 block text-sm font-semibold text-foreground">
+                    Open and read before posting.
+                  </span>
+                </span>
+              </span>
+              <ChevronDown
+                className={`size-5 shrink-0 transition-transform ${
+                  guidelinesExpanded ? "rotate-180" : ""
+                }`}
+              />
+            </button>
+
+            {guidelinesExpanded && <CommunityGuidelinesList compact className="mt-2" />}
           </div>
 
-          <label className="flex items-start gap-3 rounded-2xl border-2 border-primary bg-primary/10 p-4 cursor-pointer">
+          <label
+            className={`flex items-start gap-3 rounded-2xl border-2 p-4 ${
+              guidelinesOpened
+                ? "cursor-pointer border-primary bg-primary/10"
+                : "cursor-not-allowed border-border bg-muted/60 opacity-70"
+            }`}
+          >
             <Checkbox
               checked={guidelinesAgreed}
+              disabled={!guidelinesOpened}
               onCheckedChange={(value) => setGuidelinesAgreed(value === true)}
               className="mt-1 size-5"
               aria-label="Agree to follow the Community Guidelines for this post"
@@ -277,7 +419,9 @@ export function UploadDialog({
                 I agree to follow the Community Guidelines for this post
               </span>
               <span className="mt-2 block text-sm font-semibold text-foreground">
-                This post is factual, private, respectful, clean, and only about adults.
+                {guidelinesOpened
+                  ? "This post is factual, private, respectful, clean, and only about adults."
+                  : "Open the guidelines above before checking this."}
               </span>
             </span>
           </label>
@@ -297,7 +441,7 @@ export function UploadDialog({
 
           <Button
             onClick={handleUpload}
-            disabled={!file || !privacyAgreed || !guidelinesAgreed || loading}
+            disabled={!file || !privacyAgreed || !guidelinesOpened || !guidelinesAgreed || loading}
             className="w-full rounded-full h-11 font-semibold"
           >
             {loading ? "Posting…" : "Post it"}
