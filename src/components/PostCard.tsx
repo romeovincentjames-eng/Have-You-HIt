@@ -9,6 +9,7 @@ import { formatDistanceToNow } from "date-fns";
 type Post = {
   id: string;
   user_id: string;
+  target_user_id: string | null;
   image_url: string;
   caption: string | null;
   created_at: string;
@@ -166,10 +167,10 @@ export function PostCard({
   }
 
   return (
-    <article className="bg-card rounded-3xl overflow-hidden border border-border shadow-xl shadow-primary/5">
+    <article className="overflow-hidden rounded-2xl border border-border bg-card shadow-sm">
       {/* Header */}
-      <div className="flex items-center justify-between px-5 pt-4">
-        <div>
+      <div className="flex items-center justify-between gap-3 px-4 pt-4 sm:px-5">
+        <div className="min-w-0">
           <p className="font-semibold text-sm">@{authorName}</p>
           <p className="text-xs text-muted-foreground">
             {formatDistanceToNow(new Date(post.created_at), { addSuffix: true })}
@@ -193,7 +194,7 @@ export function PostCard({
           className="w-full aspect-[4/5] object-cover"
         />
         <div className="absolute top-3 left-3 right-3 flex items-start justify-between gap-2">
-          <div className="bg-background/90 backdrop-blur rounded-full px-3 py-1 text-sm font-bold truncate max-w-[70%]">
+          <div className="max-w-[68%] truncate rounded-full bg-background/90 px-3 py-1 text-sm font-bold backdrop-blur">
             {post.subject_name || "Unknown"}
           </div>
           {total > 0 && (
@@ -211,13 +212,13 @@ export function PostCard({
       </div>
 
       {/* Caption */}
-      {post.caption && <p className="px-5 pt-4 text-[15px] leading-relaxed">{post.caption}</p>}
+      {post.caption && <p className="px-4 pt-4 text-[15px] leading-relaxed sm:px-5">{post.caption}</p>}
 
       {/* Verdict buttons */}
-      <div className="px-5 pt-4 grid grid-cols-2 gap-2">
+      <div className="grid grid-cols-2 gap-2 px-4 pt-4 sm:px-5">
         <button
           onClick={() => vote("hit")}
-          className={`rounded-2xl py-3 font-bold text-sm flex items-center justify-center gap-2 transition ${
+          className={`flex min-h-11 items-center justify-center gap-2 rounded-full px-3 text-sm font-bold transition ${
             myVote === "hit"
               ? "bg-hit text-hit-foreground shadow-lg shadow-hit/40"
               : "bg-muted hover:bg-accent"
@@ -227,7 +228,7 @@ export function PostCard({
         </button>
         <button
           onClick={() => vote("not_hit")}
-          className={`rounded-2xl py-3 font-bold text-sm flex items-center justify-center gap-2 transition ${
+          className={`flex min-h-11 items-center justify-center gap-2 rounded-full px-3 text-sm font-bold transition ${
             myVote === "not_hit" ? "bg-miss text-miss-foreground" : "bg-muted hover:bg-accent"
           }`}
         >
@@ -236,10 +237,10 @@ export function PostCard({
       </div>
 
       {/* Flags */}
-      <div className="px-5 pt-2 grid grid-cols-2 gap-2">
+      <div className="grid grid-cols-2 gap-2 px-4 pt-2 sm:px-5">
         <button
           onClick={() => flag("green")}
-          className={`rounded-2xl py-2.5 text-sm font-semibold flex items-center justify-center gap-2 transition ${
+          className={`flex min-h-10 items-center justify-center gap-2 rounded-full px-3 text-sm font-semibold transition ${
             myFlag === "green" ? "bg-[var(--green-flag)] text-white" : "bg-muted hover:bg-accent"
           }`}
         >
@@ -247,7 +248,7 @@ export function PostCard({
         </button>
         <button
           onClick={() => flag("red")}
-          className={`rounded-2xl py-2.5 text-sm font-semibold flex items-center justify-center gap-2 transition ${
+          className={`flex min-h-10 items-center justify-center gap-2 rounded-full px-3 text-sm font-semibold transition ${
             myFlag === "red" ? "bg-[var(--red-flag)] text-white" : "bg-muted hover:bg-accent"
           }`}
         >
@@ -258,7 +259,7 @@ export function PostCard({
       {/* Comments toggle */}
       <button
         onClick={() => setShowComments((s) => !s)}
-        className="mt-3 px-5 pb-1 text-sm text-muted-foreground hover:text-foreground flex items-center gap-2 w-full"
+        className="mt-3 flex w-full items-center gap-2 px-4 pb-1 text-sm text-muted-foreground hover:text-foreground sm:px-5"
       >
         <MessageCircle className="size-4" />
         {comments.length} {comments.length === 1 ? "comment" : "comments"}
@@ -266,7 +267,7 @@ export function PostCard({
 
       {/* Comments */}
       {showComments && (
-        <div className="px-5 pb-5 pt-2 space-y-3">
+        <div className="space-y-3 px-4 pb-5 pt-2 sm:px-5">
           <div className="space-y-2 max-h-72 overflow-y-auto">
             {comments.map((c) => (
               <div

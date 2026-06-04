@@ -40,6 +40,63 @@ export type Database = {
           },
         ];
       };
+      dating_profiles: {
+        Row: {
+          bio: string | null;
+          created_at: string;
+          image_url: string;
+          latitude: number | null;
+          location_name: string | null;
+          longitude: number | null;
+          updated_at: string;
+          user_id: string;
+        };
+        Insert: {
+          bio?: string | null;
+          created_at?: string;
+          image_url: string;
+          latitude?: number | null;
+          location_name?: string | null;
+          longitude?: number | null;
+          updated_at?: string;
+          user_id: string;
+        };
+        Update: {
+          bio?: string | null;
+          created_at?: string;
+          image_url?: string;
+          latitude?: number | null;
+          location_name?: string | null;
+          longitude?: number | null;
+          updated_at?: string;
+          user_id?: string;
+        };
+        Relationships: [];
+      };
+      dating_votes: {
+        Row: {
+          created_at: string;
+          id: string;
+          target_user_id: string;
+          vote: Database["public"]["Enums"]["vote_type"];
+          voter_id: string;
+        };
+        Insert: {
+          created_at?: string;
+          id?: string;
+          target_user_id: string;
+          vote: Database["public"]["Enums"]["vote_type"];
+          voter_id: string;
+        };
+        Update: {
+          created_at?: string;
+          id?: string;
+          target_user_id?: string;
+          vote?: Database["public"]["Enums"]["vote_type"];
+          voter_id?: string;
+        };
+        Relationships: [];
+      };
       flags: {
         Row: {
           created_at: string;
@@ -108,6 +165,59 @@ export type Database = {
         };
         Relationships: [];
       };
+      match_messages: {
+        Row: {
+          body: string;
+          created_at: string;
+          id: string;
+          match_id: string;
+          sender_id: string;
+        };
+        Insert: {
+          body: string;
+          created_at?: string;
+          id?: string;
+          match_id: string;
+          sender_id: string;
+        };
+        Update: {
+          body?: string;
+          created_at?: string;
+          id?: string;
+          match_id?: string;
+          sender_id?: string;
+        };
+        Relationships: [
+          {
+            foreignKeyName: "match_messages_match_id_fkey";
+            columns: ["match_id"];
+            isOneToOne: false;
+            referencedRelation: "matches";
+            referencedColumns: ["id"];
+          },
+        ];
+      };
+      matches: {
+        Row: {
+          created_at: string;
+          id: string;
+          user_a_id: string;
+          user_b_id: string;
+        };
+        Insert: {
+          created_at?: string;
+          id?: string;
+          user_a_id: string;
+          user_b_id: string;
+        };
+        Update: {
+          created_at?: string;
+          id?: string;
+          user_a_id?: string;
+          user_b_id?: string;
+        };
+        Relationships: [];
+      };
       posts: {
         Row: {
           caption: string | null;
@@ -118,6 +228,7 @@ export type Database = {
           location_name: string | null;
           longitude: number | null;
           subject_name: string;
+          target_user_id: string | null;
           user_id: string;
         };
         Insert: {
@@ -129,6 +240,7 @@ export type Database = {
           location_name?: string | null;
           longitude?: number | null;
           subject_name?: string;
+          target_user_id?: string | null;
           user_id: string;
         };
         Update: {
@@ -140,6 +252,7 @@ export type Database = {
           location_name?: string | null;
           longitude?: number | null;
           subject_name?: string;
+          target_user_id?: string | null;
           user_id?: string;
         };
         Relationships: [];

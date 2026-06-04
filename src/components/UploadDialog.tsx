@@ -1,8 +1,7 @@
-import { useRef, useState } from "react";
+import { useEffect, useRef, useState } from "react";
 import { supabase } from "@/integrations/supabase/client";
 import { Button } from "@/components/ui/button";
 import { Checkbox } from "@/components/ui/checkbox";
-import { Input } from "@/components/ui/input";
 import { Textarea } from "@/components/ui/textarea";
 import {
   Dialog,
@@ -16,6 +15,7 @@ import { toast } from "sonner";
 import { ChevronDown, ImagePlus, Upload, MapPin, Loader2, ShieldCheck } from "lucide-react";
 
 type Loc = { lat: number; lng: number; label: string | null };
+type UserOption = { id: string; display_name: string };
 
 const IMAGE_FILE_NAME = /\.(avif|gif|heic|heif|jpe?g|png|webp)$/i;
 
@@ -38,21 +38,17 @@ function isImageFile(file: File) {
 export function UploadDialog({
   userId,
   onUploaded,
-  onLocationUse,
-  locationRemaining,
-  isSubscriber,
 }: {
   userId: string;
   onUploaded: () => void;
-  onLocationUse: () => Promise<boolean>;
-  locationRemaining: number;
-  isSubscriber: boolean;
 }) {
   const [open, setOpen] = useState(false);
   const [file, setFile] = useState<File | null>(null);
   const [preview, setPreview] = useState<string | null>(null);
   const [previewError, setPreviewError] = useState("");
-  const [subjectName, setSubjectName] = useState("");
+  const [targetUserId, setTargetUserId] = useState("");
+  const [userOptions, setUserOptions] = useState<UserOption[]>([]);
+  const [userOptionsLoading, setUserOptionsLoading] = useState(false);
   const [caption, setCaption] = useState("");
   const [loc, setLoc] = useState<Loc | null>(null);
   const [privacyAgreed, setPrivacyAgreed] = useState(false);
@@ -63,6 +59,40 @@ export function UploadDialog({
   const [loading, setLoading] = useState(false);
   const fileInputRef = useRef<HTMLInputElement | null>(null);
   const previewReadId = useRef(0);
+
+  useEffect(() => {
+    if (!open) return;
+
+    let cancelled = false;
+
+    async function loadUsers() {
+      setUserOptionsLoading(true);
+
+      const { data, error } = await supabase
+        .from("profiles")
+        .select("id,display_name")
+        .neq("id", userId)
+        .order("display_name", { ascending: true })
+        .limit(100);
+
+      if (cancelled) return;
+
+      if (error) {
+        toast.error(error.message);
+        setUserOptions([]);
+      } else {
+        setUserOptions((data as UserOption[] | null) ?? []);
+      }
+
+      setUserOptionsLoading(false);
+    }
+
+    loadUsers();
+
+    return () => {
+      cancelled = true;
+    };
+  }, [open, userId]);
 
   function pick(f: File | null) {
     previewReadId.current += 1;
@@ -126,11 +156,6 @@ export function UploadDialog({
   }
 
   async function tagLocation() {
-    if (!isSubscriber && locationRemaining <= 0) {
-      toast.error("Free location uses are used up this week. Subscribe for unlimited location.");
-      return;
-    }
-
     if (!navigator.geolocation) {
       toast.error("Geolocation not supported");
       return;
@@ -140,13 +165,6 @@ export function UploadDialog({
 
     navigator.geolocation.getCurrentPosition(
       async (pos) => {
-        const allowed = await onLocationUse();
-
-        if (!allowed) {
-          setLocLoading(false);
-          return;
-        }
-
         const { latitude: lat, longitude: lng } = pos.coords;
         let label: string | null = null;
 
@@ -192,8 +210,15 @@ export function UploadDialog({
   async function handleUpload() {
     if (!file) return;
 
-    if (!subjectName.trim()) {
-      toast.error("Add their name");
+    const targetUser = userOptions.find((option) => option.id === targetUserId);
+
+    if (!targetUser) {
+      toast.error("Choose another app user for the main feed.");
+      return;
+    }
+
+    if (targetUser.id === userId) {
+      toast.error("Main feed posts have to be about another user.");
       return;
     }
 
@@ -238,7 +263,8 @@ export function UploadDialog({
         user_id: userId,
         image_url: publicUrl,
         caption: caption.trim() || null,
-        subject_name: subjectName.trim(),
+        subject_name: targetUser.display_name,
+        target_user_id: targetUser.id,
         latitude: loc?.lat ?? null,
         longitude: loc?.lng ?? null,
         location_name: loc?.label ?? null,
@@ -252,7 +278,7 @@ export function UploadDialog({
       setPreview(null);
       setPreviewError("");
       setCaption("");
-      setSubjectName("");
+      setTargetUserId("");
       setLoc(null);
       setPrivacyAgreed(false);
       setGuidelinesOpened(false);
@@ -276,11 +302,11 @@ export function UploadDialog({
       <DialogTrigger asChild>
         <Button className="rounded-full font-semibold gap-2 h-11 px-5 shadow-lg shadow-primary/30">
           <ImagePlus className="size-4" />
-          Post a pic
+          Post someone
         </Button>
       </DialogTrigger>
 
-      <DialogContent className="rounded-3xl max-w-md max-h-[90vh] overflow-y-auto">
+      <DialogContent className="max-h-[92svh] max-w-[calc(100vw-1.5rem)] overflow-y-auto rounded-2xl sm:max-w-md">
         <DialogHeader>
           <DialogTitle className="font-display text-2xl">New post</DialogTitle>
         </DialogHeader>
@@ -338,13 +364,29 @@ export function UploadDialog({
             )}
           </div>
 
-          <Input
-            placeholder="Their name *"
-            value={subjectName}
-            onChange={(e) => setSubjectName(e.target.value)}
-            maxLength={80}
-            className="rounded-2xl"
-          />
+          <div className="space-y-2">
+            <label className="text-xs font-black uppercase text-primary">Tag another user *</label>
+            <select
+              value={targetUserId}
+              onChange={(event) => setTargetUserId(event.target.value)}
+              disabled={userOptionsLoading}
+              className="h-11 w-full rounded-2xl border border-input bg-background px-3 text-sm font-semibold outline-none focus-visible:ring-2 focus-visible:ring-ring"
+            >
+              <option value="">
+                {userOptionsLoading ? "Loading users..." : "Choose a registered user"}
+              </option>
+              {userOptions.map((option) => (
+                <option key={option.id} value={option.id}>
+                  @{option.display_name}
+                </option>
+              ))}
+            </select>
+            {!userOptionsLoading && userOptions.length === 0 && (
+              <p className="text-xs font-semibold text-muted-foreground">
+                No other users are available to tag yet.
+              </p>
+            )}
+          </div>
 
           <Textarea
             placeholder="Say something… (optional)"
@@ -369,7 +411,7 @@ export function UploadDialog({
             )}
             {loc
               ? (loc.label ?? `${loc.lat.toFixed(3)}, ${loc.lng.toFixed(3)}`)
-              : "Tag my location"}
+              : "Tag photo location"}
           </Button>
 
           <div className="border-y border-border py-3">
@@ -434,14 +476,21 @@ export function UploadDialog({
               aria-label="Agree to public place and privacy rights statement"
             />
             <span className="text-lg font-black uppercase leading-tight text-primary">
-              I agree that this photo was taken in a public place and I am not violating any privacy
-              rights
+              I agree that this photo is appropriate to post and I am not violating any privacy
+              rights of the tagged user
             </span>
           </label>
 
           <Button
             onClick={handleUpload}
-            disabled={!file || !privacyAgreed || !guidelinesOpened || !guidelinesAgreed || loading}
+            disabled={
+              !file ||
+              !targetUserId ||
+              !privacyAgreed ||
+              !guidelinesOpened ||
+              !guidelinesAgreed ||
+              loading
+            }
             className="w-full rounded-full h-11 font-semibold"
           >
             {loading ? "Posting…" : "Post it"}
