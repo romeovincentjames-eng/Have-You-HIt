@@ -4,6 +4,7 @@ import { toast } from "sonner";
 
 import { supabase } from "@/integrations/supabase/client";
 import { Button } from "@/components/ui/button";
+import { Checkbox } from "@/components/ui/checkbox";
 import { Textarea } from "@/components/ui/textarea";
 import {
   Dialog,
@@ -113,6 +114,7 @@ function SelfProfileDialog({
   const [preview, setPreview] = useState<string | null>(null);
   const [bio, setBio] = useState("");
   const [loc, setLoc] = useState<Loc | null>(null);
+  const [selfPhotoConfirmed, setSelfPhotoConfirmed] = useState(false);
   const [locLoading, setLocLoading] = useState(false);
   const [saving, setSaving] = useState(false);
   const fileInputRef = useRef<HTMLInputElement | null>(null);
@@ -132,6 +134,7 @@ function SelfProfileDialog({
           }
         : null,
     );
+    setSelfPhotoConfirmed(false);
 
     if (fileInputRef.current) {
       fileInputRef.current.value = "";
@@ -197,6 +200,11 @@ function SelfProfileDialog({
       return;
     }
 
+    if (!selfPhotoConfirmed) {
+      toast.error("Confirm this is a photo of you before posting.");
+      return;
+    }
+
     setSaving(true);
 
     try {
@@ -236,6 +244,12 @@ function SelfProfileDialog({
       toast.success(currentProfile ? "Dating profile updated" : "Dating profile posted");
       setOpen(false);
       onSaved();
+      window.setTimeout(() => {
+        document.getElementById("dating-people")?.scrollIntoView({
+          behavior: "smooth",
+          block: "start",
+        });
+      }, 100);
     } catch (err) {
       toast.error(getErrorMessage(err, "Could not save dating profile"));
     } finally {
@@ -305,7 +319,23 @@ function SelfProfileDialog({
             </span>
           </Button>
 
-          <Button onClick={saveProfile} disabled={saving} className="h-11 w-full rounded-full font-semibold">
+          <label className="flex cursor-pointer items-start gap-3 rounded-2xl border border-primary/30 bg-primary/10 p-3">
+            <Checkbox
+              checked={selfPhotoConfirmed}
+              onCheckedChange={(value) => setSelfPhotoConfirmed(value === true)}
+              className="mt-0.5 size-5"
+              aria-label="I understand that this is a photo of me"
+            />
+            <span className="text-sm font-black leading-snug">
+              I understand that this is a photo of me
+            </span>
+          </label>
+
+          <Button
+            onClick={saveProfile}
+            disabled={saving || !selfPhotoConfirmed}
+            className="h-11 w-full rounded-full font-semibold"
+          >
             {saving ? "Saving..." : "Save dating post"}
           </Button>
         </div>
@@ -456,7 +486,7 @@ export function DatingSection({
         toast.success("It is a match. Open Matches to message.");
         onMatchesChanged();
       } else {
-        toast.success(voteValue === "hit" ? "Hit sent" : "Not hit saved");
+        toast.success(voteValue === "hit" ? "Would hit sent" : "Would not hit saved");
       }
 
       await load();
@@ -535,7 +565,7 @@ export function DatingSection({
           )}
         </div>
 
-        <div className="flex items-center justify-between gap-3">
+        <div id="dating-people" className="scroll-mt-36 flex items-center justify-between gap-3">
           <h2 className="font-display text-2xl font-black">People</h2>
           <Button variant="ghost" size="icon" onClick={load} className="rounded-full" aria-label="Refresh dating profiles">
             {loading ? <RefreshCw className="size-4 animate-spin" /> : <RefreshCw className="size-4" />}
@@ -602,18 +632,18 @@ export function DatingSection({
                   <button
                     type="button"
                     onClick={() => vote(profile.user_id, "hit")}
-                    className={`min-h-11 rounded-full px-3 text-sm font-black transition ${
+                    className={`min-h-11 rounded-full px-2 text-[13px] font-black leading-tight transition sm:px-3 sm:text-sm ${
                       myVote === "hit"
                         ? "bg-hit text-hit-foreground shadow-lg shadow-hit/30"
                         : "bg-muted hover:bg-accent"
                     }`}
                   >
-                    Hit
+                    Would hit
                   </button>
                   <button
                     type="button"
                     onClick={() => vote(profile.user_id, "not_hit")}
-                    className={`min-h-11 rounded-full px-3 text-sm font-black transition ${
+                    className={`min-h-11 rounded-full px-2 text-[13px] font-black leading-tight transition sm:px-3 sm:text-sm ${
                       myVote === "not_hit"
                         ? "bg-miss text-miss-foreground"
                         : "bg-muted hover:bg-accent"
@@ -621,7 +651,7 @@ export function DatingSection({
                   >
                     <span className="inline-flex items-center justify-center gap-1">
                       <X className="size-4" />
-                      Not hit
+                      Would not hit
                     </span>
                   </button>
                 </div>

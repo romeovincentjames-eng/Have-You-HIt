@@ -19,11 +19,12 @@ import { UploadDialog } from "@/components/UploadDialog";
 import { PostCard } from "@/components/PostCard";
 import { DatingSection } from "@/components/DatingSection";
 import { MatchesSection } from "@/components/MatchesSection";
+import { ProfileSection } from "@/components/ProfileSection";
 import { CommunityGuidelinesDialog } from "@/components/CommunityGuidelines";
 import { useUsageLimits } from "@/hooks/use-usage-limits";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
-import { Heart, LogOut, MessageCircle, Search, MapPin, Users, X } from "lucide-react";
+import { Heart, LogOut, MessageCircle, Search, MapPin, UserCircle, Users, X } from "lucide-react";
 import { toast } from "sonner";
 
 export const Route = createFileRoute("/")({
@@ -54,7 +55,7 @@ type Post = {
   location_name: string | null;
 };
 
-type ActiveView = "feed" | "dating" | "matches";
+type ActiveView = "feed" | "dating" | "matches" | "profile";
 type Gender = "man" | "woman";
 
 const NEARBY_KM = 80;
@@ -447,20 +448,20 @@ function Index() {
           onTouchMove={handleTouchMove}
           onTouchEnd={handleTouchEnd}
         >
-          <header className="sticky top-0 z-30 backdrop-blur-xl bg-background/70 border-b border-border">
-            <div className="mx-auto max-w-md px-3 py-3 space-y-3 sm:max-w-2xl sm:px-4">
-              <div className="flex items-start justify-between gap-3">
-                <div className="min-w-0">
-                  <h1 className="truncate font-display text-2xl font-black leading-none text-primary sm:text-3xl">
+          <header className="sticky top-0 z-30 border-b border-border bg-background/80 pt-[env(safe-area-inset-top)] backdrop-blur-xl">
+            <div className="mx-auto max-w-md space-y-2 px-3 py-2 sm:max-w-2xl sm:px-4 sm:py-3">
+              <div className="flex items-center justify-between gap-2">
+                <div className="min-w-0 flex-1">
+                  <h1 className="truncate font-display text-[1.65rem] font-black leading-none text-primary sm:text-3xl">
                     Have You Hit
                   </h1>
-                  <p className="mt-1 text-[11px] font-black uppercase leading-tight text-primary">
+                  <p className="mt-1 truncate text-[10px] font-black uppercase leading-tight text-primary sm:text-[11px]">
                     Dating meets the verdict feed
                   </p>
                 </div>
 
-                <div className="flex shrink-0 items-center justify-end gap-1.5">
-                  <CommunityGuidelinesDialog />
+                <div className="flex min-w-0 shrink-0 items-center justify-end gap-1">
+                  <CommunityGuidelinesDialog triggerClassName="h-10 px-3 text-xs" />
 
                   {!active && activeView !== "feed" && (
                     <SubscribeButton
@@ -483,11 +484,11 @@ function Index() {
                 </div>
               </div>
 
-              <nav className="grid grid-cols-3 gap-1 rounded-full bg-muted p-1">
+              <nav className="grid grid-cols-4 gap-1 rounded-full bg-muted p-1">
                 <button
                   type="button"
                   onClick={() => setActiveView("feed")}
-                  className={`flex h-10 items-center justify-center gap-1 rounded-full text-xs font-black transition ${
+                  className={`flex h-9 items-center justify-center gap-1 rounded-full text-[11px] font-black transition sm:h-10 sm:text-xs ${
                     activeView === "feed"
                       ? "bg-background text-primary shadow-sm"
                       : "text-muted-foreground"
@@ -499,7 +500,7 @@ function Index() {
                 <button
                   type="button"
                   onClick={() => setActiveView("dating")}
-                  className={`flex h-10 items-center justify-center gap-1 rounded-full text-xs font-black transition ${
+                  className={`flex h-9 items-center justify-center gap-1 rounded-full text-[11px] font-black transition sm:h-10 sm:text-xs ${
                     activeView === "dating"
                       ? "bg-background text-primary shadow-sm"
                       : "text-muted-foreground"
@@ -511,7 +512,7 @@ function Index() {
                 <button
                   type="button"
                   onClick={() => setActiveView("matches")}
-                  className={`flex h-10 items-center justify-center gap-1 rounded-full text-xs font-black transition ${
+                  className={`flex h-9 items-center justify-center gap-1 rounded-full text-[11px] font-black transition sm:h-10 sm:text-xs ${
                     activeView === "matches"
                       ? "bg-background text-primary shadow-sm"
                       : "text-muted-foreground"
@@ -519,6 +520,18 @@ function Index() {
                 >
                   <MessageCircle className="size-4" />
                   Matches
+                </button>
+                <button
+                  type="button"
+                  onClick={() => setActiveView("profile")}
+                  className={`flex h-9 items-center justify-center gap-1 rounded-full text-[11px] font-black transition sm:h-10 sm:text-xs ${
+                    activeView === "profile"
+                      ? "bg-background text-primary shadow-sm"
+                      : "text-muted-foreground"
+                  }`}
+                >
+                  <UserCircle className="size-4" />
+                  Profile
                 </button>
               </nav>
 
@@ -675,6 +688,8 @@ function Index() {
               refreshKey={matchesRefreshKey}
             />
           )}
+
+          {activeView === "profile" && <ProfileSection currentUserId={user.id} />}
         </div>
       )}
     </PaymentGate>

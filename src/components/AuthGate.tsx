@@ -19,7 +19,6 @@ export function AuthGate() {
   const [email, setEmail] = useState("");
   const [password, setPassword] = useState("");
   const [displayName, setDisplayName] = useState("");
-  const [gender, setGender] = useState<"man" | "woman" | "">("");
   const [postingConsentAgreed, setPostingConsentAgreed] = useState(false);
   const [guidelinesOpened, setGuidelinesOpened] = useState(false);
   const [guidelinesExpanded, setGuidelinesExpanded] = useState(false);
@@ -73,11 +72,6 @@ export function AuthGate() {
       return;
     }
 
-    if (gender !== "man" && gender !== "woman") {
-      toast.error("Confirm your gender before joining.");
-      return;
-    }
-
     if (!postingConsentAgreed) {
       toast.error("Please accept being posted and tagged on this app before joining.");
       return;
@@ -95,7 +89,6 @@ export function AuthGate() {
           email: normalizedEmail,
           password,
           displayName: normalizedDisplayName,
-          gender,
           postingConsentAgreedAt,
           communityGuidelinesAgreedAt: agreedAt,
           communityGuidelinesVersion: COMMUNITY_GUIDELINES_VERSION,
@@ -168,34 +161,6 @@ export function AuthGate() {
                   placeholder="bestie"
                   maxLength={40}
                 />
-              </div>
-            )}
-
-            {mode === "signup" && (
-              <div className="space-y-2">
-                <Label>Confirm your gender</Label>
-                <div className="grid grid-cols-2 gap-2 rounded-2xl bg-muted p-1">
-                  {[
-                    { value: "man", label: "Man" },
-                    { value: "woman", label: "Woman" },
-                  ].map((option) => (
-                    <button
-                      key={option.value}
-                      type="button"
-                      onClick={() => setGender(option.value as "man" | "woman")}
-                      className={`h-10 rounded-xl text-sm font-black transition ${
-                        gender === option.value
-                          ? "bg-primary text-primary-foreground shadow"
-                          : "text-muted-foreground"
-                      }`}
-                    >
-                      {option.label}
-                    </button>
-                  ))}
-                </div>
-                <p className="text-xs font-semibold text-muted-foreground">
-                  This app only matches men with women and women with men.
-                </p>
               </div>
             )}
 
@@ -312,8 +277,7 @@ export function AuthGate() {
                 (mode === "signup" &&
                   (!guidelinesOpened ||
                     !guidelinesAgreed ||
-                    !postingConsentAgreed ||
-                    (gender !== "man" && gender !== "woman")))
+                    !postingConsentAgreed))
               }
               className="w-full rounded-full h-11 text-base font-semibold"
             >

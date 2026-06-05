@@ -218,21 +218,21 @@ export function PostCard({
       <div className="grid grid-cols-2 gap-2 px-4 pt-4 sm:px-5">
         <button
           onClick={() => vote("hit")}
-          className={`flex min-h-11 items-center justify-center gap-2 rounded-full px-3 text-sm font-bold transition ${
+          className={`flex min-h-11 items-center justify-center gap-1.5 rounded-full px-2 text-[13px] font-bold leading-tight transition sm:gap-2 sm:px-3 sm:text-sm ${
             myVote === "hit"
               ? "bg-hit text-hit-foreground shadow-lg shadow-hit/40"
               : "bg-muted hover:bg-accent"
           }`}
         >
-          <Flame className="size-4" /> Hit · {hits}
+          <Flame className="size-4" /> Have you hit · {hits}
         </button>
         <button
           onClick={() => vote("not_hit")}
-          className={`flex min-h-11 items-center justify-center gap-2 rounded-full px-3 text-sm font-bold transition ${
+          className={`flex min-h-11 items-center justify-center gap-1.5 rounded-full px-2 text-[13px] font-bold leading-tight transition sm:gap-2 sm:px-3 sm:text-sm ${
             myVote === "not_hit" ? "bg-miss text-miss-foreground" : "bg-muted hover:bg-accent"
           }`}
         >
-          <X className="size-4" /> Not Hit · {misses}
+          <X className="size-4" /> Have not hit · {misses}
         </button>
       </div>
 

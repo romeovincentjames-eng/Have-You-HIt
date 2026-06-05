@@ -11,7 +11,6 @@ export const createConfirmedAccount = createServerFn({ method: "POST" })
       email: z.string().email(),
       password: z.string().min(6),
       displayName: z.string().max(40).optional(),
-      gender: z.enum(["man", "woman"]),
       postingConsentAgreedAt: z.string().datetime(),
       communityGuidelinesAgreedAt: z.string().datetime(),
       communityGuidelinesVersion: z.string().min(1),
@@ -28,7 +27,6 @@ export const createConfirmedAccount = createServerFn({ method: "POST" })
       email_confirm: true,
       user_metadata: {
         display_name: displayName,
-        gender: data.gender,
         posting_consent_agreed: true,
         posting_consent_agreed_at: data.postingConsentAgreedAt,
         community_guidelines_agreed: true,
@@ -53,7 +51,6 @@ export const createConfirmedAccount = createServerFn({ method: "POST" })
       {
         id: created.user.id,
         display_name: displayName,
-        gender: data.gender,
         posting_consent_agreed_at: data.postingConsentAgreedAt,
         community_guidelines_agreed_at: data.communityGuidelinesAgreedAt,
         community_guidelines_version: data.communityGuidelinesVersion,

@@ -6,6 +6,7 @@ import { toast } from "sonner";
 import { supabase } from "@/integrations/supabase/client";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
+import { UserProfileDialog } from "@/components/ProfileSection";
 
 type Match = {
   id: string;
@@ -240,7 +241,22 @@ export function MatchesSection({
 
             <div className="rounded-2xl border border-border bg-card">
               <div className="border-b border-border px-4 py-3">
-                <p className="text-sm font-black">@{otherUserId ? names[otherUserId] ?? "someone" : "Match"}</p>
+                {otherUserId ? (
+                  <UserProfileDialog
+                    userId={otherUserId}
+                    currentUserId={currentUserId}
+                    trigger={
+                      <button
+                        type="button"
+                        className="max-w-full truncate text-left text-sm font-black text-primary underline-offset-4 hover:underline"
+                      >
+                        @{names[otherUserId] ?? "someone"}
+                      </button>
+                    }
+                  />
+                ) : (
+                  <p className="text-sm font-black">Match</p>
+                )}
                 <p className="text-xs text-muted-foreground">Messages are available after a mutual hit.</p>
               </div>
 
